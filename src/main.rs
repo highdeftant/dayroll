@@ -97,7 +97,10 @@ fn run_app() -> Result<(), String> {
             KeyCode::Char('m') => {
                 if let Some(todo_id) = visible.get(selected_index) {
                     if let Some(todo) = app.todo(*todo_id) {
-                        let next_day = todo.assigned_day.succ_opt().unwrap_or(todo.assigned_day);
+                        let next_day = match todo.assigned_day.succ_opt() {
+                            Some(day) => day,
+                            None => todo.assigned_day,
+                        };
                         app.move_todo(*todo_id, next_day)?;
                         store.save(app.todos())?;
                     }

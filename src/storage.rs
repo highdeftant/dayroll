@@ -32,8 +32,10 @@ impl Store {
     }
 
     pub fn default_path() -> PathBuf {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        Path::new(&home).join(".dayroll").join("todos.json")
+        match std::env::var("HOME") {
+            Ok(home) => Path::new(&home).join(".dayroll").join("todos.json"),
+            Err(_) => Path::new(".").join(".dayroll").join("todos.json"),
+        }
     }
 }
 

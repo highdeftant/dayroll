@@ -73,11 +73,15 @@ impl AppState {
     }
 
     pub fn select_next_day(&mut self) {
-        self.selected_day = self.selected_day.succ_opt().unwrap_or(self.selected_day);
+        if let Some(next) = self.selected_day.succ_opt() {
+            self.selected_day = next;
+        }
     }
 
     pub fn select_prev_day(&mut self) {
-        self.selected_day = self.selected_day.pred_opt().unwrap_or(self.selected_day);
+        if let Some(prev) = self.selected_day.pred_opt() {
+            self.selected_day = prev;
+        }
     }
 
     pub fn todos(&self) -> &[Todo] {
