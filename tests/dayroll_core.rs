@@ -75,3 +75,33 @@ fn day_navigation_moves_selection() -> Result<(), String> {
     assert_eq!(state.selected_day(), today);
     Ok(())
 }
+
+#[test]
+fn month_navigation_clamps_to_month_length() -> Result<(), String> {
+    let jan_31 = date(2026, 1, 31)?;
+    let mut state = AppState::new_for_date(jan_31);
+
+    state.select_next_month();
+    assert_eq!(state.selected_day(), date(2026, 2, 28)?);
+
+    state.select_prev_month();
+    assert_eq!(state.selected_day(), date(2026, 1, 28)?);
+    Ok(())
+}
+
+#[test]
+fn month_grid_has_42_cells_and_contains_selected_day() -> Result<(), String> {
+    let selected = date(2026, 4, 18)?;
+    let grid = dayroll::app::month_grid(selected)?;
+
+    assert_eq!(grid.len(), 42);
+    assert!(grid.iter().flatten().any(|d| *d == selected));
+    Ok(())
+}
+
+#[test]
+fn viewport_window_keeps_selection_visible() {
+    let (start, end) = dayroll::app::viewport_window(40, 22, 10);
+    assert!(22 >= start && 22 < end);
+    assert_eq!(end.saturating_sub(start), 10);
+}

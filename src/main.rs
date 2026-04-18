@@ -2,20 +2,22 @@ use std::error::Error;
 use std::io;
 use std::time::Duration;
 
-use chrono::Local;
+use chrono::{Datelike, Local, NaiveDate};
 use crossterm::ExecutableCommand;
 use crossterm::event::{self, Event, KeyCode};
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use dayroll::app::{AppState, DayBuckets};
-use dayroll::model::Priority;
+use dayroll::app::{AppState, DayBuckets, month_grid, viewport_window};
+use dayroll::model::{Priority, Status};
 use dayroll::storage::{Store, TodoStore};
 use ratatui::Terminal;
-use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::{
+    Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+};
 
 const COLOR_VOID: Color = Color::Rgb(24, 28, 34);
 const COLOR_STEEL: Color = Color::Rgb(72, 82, 96);
@@ -23,6 +25,15 @@ const COLOR_GHOST: Color = Color::Rgb(214, 221, 230);
 const COLOR_GREEN: Color = Color::Rgb(134, 239, 172);
 const COLOR_AMBER: Color = Color::Rgb(252, 211, 77);
 const COLOR_RED: Color = Color::Rgb(248, 113, 113);
+const COLOR_CYAN: Color = Color::Rgb(147, 197, 253);
+
+#[derive(Debug, Clone)]
+struct VisibleTodo {
+    id: uuid::Uuid,
+    label: String,
+    overdue: bool,
+    status: Status,
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     let result = run_app();
@@ -50,16 +61,16 @@ fn run_app() -> Result<(), String> {
         Terminal::new(backend).map_err(|error| format!("terminal init failed: {error}"))?;
 
     loop {
-        let visible = visible_todo_ids(&app);
-        if selected_index >= visible.len() && !visible.is_empty() {
-            selected_index = visible.len().saturating_sub(1);
+        let visible_rows = visible_todos(&app);
+        if selected_index >= visible_rows.len() && !visible_rows.is_empty() {
+            selected_index = visible_rows.len().saturating_sub(1);
         }
-        if visible.is_empty() {
+        if visible_rows.is_empty() {
             selected_index = 0;
         }
 
         terminal
-            .draw(|frame| draw_ui(frame, &app, selected_index))
+            .draw(|frame| draw_ui(frame, &app, &visible_rows, selected_index))
             .map_err(|error| format!("draw failed: {error}"))?;
 
         if !event::poll(Duration::from_millis(250))
@@ -84,9 +95,17 @@ fn run_app() -> Result<(), String> {
                 app.select_prev_day();
                 selected_index = 0;
             }
+            KeyCode::Char('}') | KeyCode::Char('L') => {
+                app.select_next_month();
+                selected_index = 0;
+            }
+            KeyCode::Char('{') | KeyCode::Char('H') => {
+                app.select_prev_month();
+                selected_index = 0;
+            }
             KeyCode::Char('t') => {
                 let now = Local::now().date_naive();
-                app = AppState::with_todos(now, app.todos().to_vec());
+                app.set_selected_day(now);
                 selected_index = 0;
             }
             KeyCode::Char('a') => {
@@ -95,25 +114,25 @@ fn run_app() -> Result<(), String> {
                 store.save(app.todos())?;
             }
             KeyCode::Char('m') => {
-                if let Some(todo_id) = visible.get(selected_index) {
-                    if let Some(todo) = app.todo(*todo_id) {
+                if let Some(row) = visible_rows.get(selected_index) {
+                    if let Some(todo) = app.todo(row.id) {
                         let next_day = match todo.assigned_day.succ_opt() {
                             Some(day) => day,
                             None => todo.assigned_day,
                         };
-                        app.move_todo(*todo_id, next_day)?;
+                        app.move_todo(row.id, next_day)?;
                         store.save(app.todos())?;
                     }
                 }
             }
             KeyCode::Enter | KeyCode::Char(' ') => {
-                if let Some(todo_id) = visible.get(selected_index) {
-                    app.toggle_done(*todo_id)?;
+                if let Some(row) = visible_rows.get(selected_index) {
+                    app.toggle_done(row.id)?;
                     store.save(app.todos())?;
                 }
             }
             KeyCode::Char('j') | KeyCode::Down => {
-                if selected_index + 1 < visible.len() {
+                if selected_index + 1 < visible_rows.len() {
                     selected_index += 1;
                 }
             }
@@ -134,39 +153,60 @@ fn run_app() -> Result<(), String> {
     Ok(())
 }
 
-fn visible_todo_ids(app: &AppState) -> Vec<uuid::Uuid> {
+fn visible_todos(app: &AppState) -> Vec<VisibleTodo> {
     let buckets = DayBuckets::for_day(app.selected_day(), app.todos());
-    let mut ids = Vec::new();
-    for todo in buckets.overdue {
-        ids.push(todo.id);
+    let mut rows = Vec::new();
+
+    for todo in &buckets.overdue {
+        rows.push(VisibleTodo {
+            id: todo.id,
+            label: format!("{} ({})", todo.title, todo.assigned_day),
+            overdue: true,
+            status: todo.status,
+        });
     }
-    for todo in buckets.today {
-        ids.push(todo.id);
+
+    for todo in &buckets.today {
+        rows.push(VisibleTodo {
+            id: todo.id,
+            label: todo.title.clone(),
+            overdue: false,
+            status: todo.status,
+        });
     }
-    ids
+
+    rows
 }
 
-fn draw_ui(frame: &mut ratatui::Frame<'_>, app: &AppState, selected_index: usize) {
+fn draw_ui(
+    frame: &mut ratatui::Frame<'_>,
+    app: &AppState,
+    visible_rows: &[VisibleTodo],
+    selected_index: usize,
+) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),
-            Constraint::Min(8),
+            Constraint::Min(10),
             Constraint::Length(3),
         ])
         .split(frame.area());
 
-    let buckets = DayBuckets::for_day(app.selected_day(), app.todos());
+    let middle = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(30), Constraint::Min(20)])
+        .split(layout[1]);
 
     let pending_count = app
         .todos()
         .iter()
-        .filter(|todo| todo.status == dayroll::model::Status::Pending)
+        .filter(|todo| todo.status == Status::Pending)
         .count();
     let done_count = app
         .todos()
         .iter()
-        .filter(|todo| todo.status == dayroll::model::Status::Done)
+        .filter(|todo| todo.status == Status::Done)
         .count();
 
     let title = Paragraph::new(Line::from(vec![
@@ -193,61 +233,12 @@ fn draw_ui(frame: &mut ratatui::Frame<'_>, app: &AppState, selected_index: usize
             .border_style(Style::default().fg(COLOR_STEEL)),
     );
 
-    let mut lines = Vec::<Line<'_>>::new();
-    lines.push(Line::from(Span::styled(
-        "OVERDUE",
-        Style::default().fg(COLOR_RED).add_modifier(Modifier::BOLD),
-    )));
+    let calendar = draw_calendar_widget(app.selected_day());
 
-    let mut row = 0usize;
-    for todo in &buckets.overdue {
-        let selected = row == selected_index;
-        let marker = if selected { ">" } else { " " };
-        lines.push(Line::from(vec![
-            Span::styled(format!("{} ", marker), Style::default().fg(COLOR_AMBER)),
-            Span::raw(format!(
-                "[{}] {} ({})",
-                status_symbol(todo.status),
-                todo.title,
-                todo.assigned_day
-            )),
-        ]));
-        row += 1;
-    }
-
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "TODAY",
-        Style::default()
-            .fg(COLOR_GREEN)
-            .add_modifier(Modifier::BOLD),
-    )));
-
-    for todo in &buckets.today {
-        let selected = row == selected_index;
-        let marker = if selected { ">" } else { " " };
-        lines.push(Line::from(vec![
-            Span::styled(format!("{} ", marker), Style::default().fg(COLOR_AMBER)),
-            Span::raw(format!("[{}] {}", status_symbol(todo.status), todo.title)),
-        ]));
-        row += 1;
-    }
-
-    if row == 0 {
-        lines.push(Line::from("  no tasks yet for this day"));
-    }
-
-    let list = Paragraph::new(lines)
-        .style(Style::default().fg(COLOR_GHOST).bg(COLOR_VOID))
-        .block(
-            Block::default()
-                .title("Calendar Day View")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(COLOR_STEEL)),
-        );
+    let tasks = draw_tasks_widget(middle[1], visible_rows, selected_index);
 
     let status = Paragraph::new(
-        "[a] add [space/enter] toggle done [m] move +1 day [[/]] day nav [t] today [q] quit",
+        "[a] add [space/enter] toggle [m] move +1d [[/]] day [{/}] month [t] today [q] quit",
     )
     .style(Style::default().fg(COLOR_GHOST).bg(COLOR_VOID))
     .block(
@@ -257,14 +248,159 @@ fn draw_ui(frame: &mut ratatui::Frame<'_>, app: &AppState, selected_index: usize
     );
 
     frame.render_widget(title, layout[0]);
-    frame.render_widget(list, layout[1]);
+    frame.render_widget(calendar, middle[0]);
+    frame.render_widget(tasks.0, middle[1]);
+
+    if let Some((scrollbar, mut state, area)) = tasks.1 {
+        frame.render_stateful_widget(scrollbar, area, &mut state);
+    }
+
     frame.render_widget(status, layout[2]);
 }
 
-fn status_symbol(status: dayroll::model::Status) -> &'static str {
-    if status == dayroll::model::Status::Done {
-        "✓"
-    } else {
-        " "
+fn draw_calendar_widget(selected_day: NaiveDate) -> Paragraph<'static> {
+    let mut lines = Vec::<Line<'static>>::new();
+    lines.push(Line::from(Span::styled(
+        format!(
+            "{} {}",
+            month_name(selected_day.month()),
+            selected_day.year()
+        ),
+        Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from("Mo Tu We Th Fr Sa Su"));
+
+    match month_grid(selected_day) {
+        Ok(cells) => {
+            for week in 0..6 {
+                let mut spans = Vec::<Span<'static>>::new();
+                for day_col in 0..7 {
+                    let idx = week * 7 + day_col;
+                    match cells.get(idx).and_then(|cell| *cell) {
+                        Some(date) => {
+                            let text = format!("{:>2}", date.day());
+                            let style = if date == selected_day {
+                                Style::default()
+                                    .fg(COLOR_VOID)
+                                    .bg(COLOR_AMBER)
+                                    .add_modifier(Modifier::BOLD)
+                            } else {
+                                Style::default().fg(COLOR_GHOST)
+                            };
+                            spans.push(Span::styled(text, style));
+                        }
+                        None => spans.push(Span::styled("  ", Style::default().fg(COLOR_STEEL))),
+                    }
+
+                    if day_col < 6 {
+                        spans.push(Span::raw(" "));
+                    }
+                }
+                lines.push(Line::from(spans));
+            }
+        }
+        Err(error) => {
+            lines.push(Line::from(Span::styled(
+                error,
+                Style::default().fg(COLOR_RED),
+            )));
+        }
     }
+
+    Paragraph::new(lines)
+        .style(Style::default().fg(COLOR_GHOST).bg(COLOR_VOID))
+        .block(
+            Block::default()
+                .title("Calendar")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(COLOR_STEEL)),
+        )
+}
+
+fn draw_tasks_widget(
+    area: Rect,
+    visible_rows: &[VisibleTodo],
+    selected_index: usize,
+) -> (
+    Paragraph<'static>,
+    Option<(Scrollbar<'static>, ScrollbarState, Rect)>,
+) {
+    let list_height = usize::from(area.height.saturating_sub(2));
+    let (start, end) = viewport_window(visible_rows.len(), selected_index, list_height);
+
+    let mut lines = Vec::<Line<'static>>::new();
+    if visible_rows.is_empty() {
+        lines.push(Line::from("no tasks for selected day"));
+    } else {
+        for (row_idx, row) in visible_rows.iter().enumerate().take(end).skip(start) {
+            let marker = if row_idx == selected_index { ">" } else { " " };
+            let bucket = if row.overdue { "O" } else { "T" };
+            let style = match row.status {
+                Status::Done => Style::default().fg(COLOR_GREEN),
+                Status::Pending => {
+                    if row.overdue {
+                        Style::default().fg(COLOR_RED)
+                    } else {
+                        Style::default().fg(COLOR_GHOST)
+                    }
+                }
+            };
+            lines.push(Line::from(vec![
+                Span::styled(format!("{} ", marker), Style::default().fg(COLOR_AMBER)),
+                Span::styled(
+                    format!("[{} {}] {}", bucket, status_symbol(row.status), row.label),
+                    style,
+                ),
+            ]));
+        }
+    }
+
+    let paragraph = Paragraph::new(lines)
+        .style(Style::default().fg(COLOR_GHOST).bg(COLOR_VOID))
+        .block(
+            Block::default()
+                .title("Tasks")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(COLOR_STEEL)),
+        );
+
+    let scrollbar = if visible_rows.len() > list_height && list_height > 0 {
+        let state = ScrollbarState::new(visible_rows.len())
+            .position(start)
+            .viewport_content_length(list_height);
+        let sb = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .thumb_style(Style::default().fg(COLOR_CYAN))
+            .track_style(Style::default().fg(COLOR_STEEL));
+        let sb_area = area.inner(Margin {
+            vertical: 1,
+            horizontal: 0,
+        });
+        Some((sb, state, sb_area))
+    } else {
+        None
+    };
+
+    (paragraph, scrollbar)
+}
+
+fn month_name(month: u32) -> &'static str {
+    match month {
+        1 => "January",
+        2 => "February",
+        3 => "March",
+        4 => "April",
+        5 => "May",
+        6 => "June",
+        7 => "July",
+        8 => "August",
+        9 => "September",
+        10 => "October",
+        11 => "November",
+        12 => "December",
+        _ => "Unknown",
+    }
+}
+
+fn status_symbol(status: Status) -> &'static str {
+    if status == Status::Done { "✓" } else { " " }
 }
