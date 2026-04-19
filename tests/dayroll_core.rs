@@ -105,3 +105,26 @@ fn viewport_window_keeps_selection_visible() {
     assert!(22 >= start && 22 < end);
     assert_eq!(end.saturating_sub(start), 10);
 }
+
+#[test]
+fn delete_removes_todo_by_id() -> Result<(), String> {
+    let day = date(2026, 4, 18)?;
+    let mut state = AppState::new_for_date(day);
+    let id = state.add_todo("remove me", Priority::Low, day);
+    assert_eq!(state.todos().len(), 1);
+
+    state.delete_todo(id)?;
+    assert_eq!(state.todos().len(), 0);
+    assert!(state.todo(id).is_none());
+    Ok(())
+}
+
+#[test]
+fn delete_missing_id_returns_error() -> Result<(), String> {
+    let day = date(2026, 4, 18)?;
+    let mut state = AppState::new_for_date(day);
+
+    let err = state.delete_todo(uuid::Uuid::nil());
+    assert!(err.is_err());
+    Ok(())
+}

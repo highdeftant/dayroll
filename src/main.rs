@@ -125,6 +125,12 @@ fn run_app() -> Result<(), String> {
                     }
                 }
             }
+            KeyCode::Char('d') => {
+                if let Some(row) = visible_rows.get(selected_index) {
+                    app.delete_todo(row.id)?;
+                    store.save(app.todos())?;
+                }
+            }
             KeyCode::Enter | KeyCode::Char(' ') => {
                 if let Some(row) = visible_rows.get(selected_index) {
                     app.toggle_done(row.id)?;
@@ -188,15 +194,11 @@ fn draw_ui(
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),
-            Constraint::Min(10),
+            Constraint::Length(10),
+            Constraint::Min(8),
             Constraint::Length(3),
         ])
         .split(frame.area());
-
-    let middle = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(30), Constraint::Min(20)])
-        .split(layout[1]);
 
     let pending_count = app
         .todos()
@@ -235,10 +237,10 @@ fn draw_ui(
 
     let calendar = draw_calendar_widget(app.selected_day());
 
-    let tasks = draw_tasks_widget(middle[1], visible_rows, selected_index);
+    let tasks = draw_tasks_widget(layout[2], visible_rows, selected_index);
 
     let status = Paragraph::new(
-        "[a] add [space/enter] toggle [m] move +1d [[/]] day [{/}] month [t] today [q] quit",
+        "[a] add [d] delete [space/enter] toggle [m] move +1d [[/]] day [{/}] month [t] today [q] quit",
     )
     .style(Style::default().fg(COLOR_GHOST).bg(COLOR_VOID))
     .block(
@@ -248,14 +250,14 @@ fn draw_ui(
     );
 
     frame.render_widget(title, layout[0]);
-    frame.render_widget(calendar, middle[0]);
-    frame.render_widget(tasks.0, middle[1]);
+    frame.render_widget(calendar, layout[1]);
+    frame.render_widget(tasks.0, layout[2]);
 
     if let Some((scrollbar, mut state, area)) = tasks.1 {
         frame.render_stateful_widget(scrollbar, area, &mut state);
     }
 
-    frame.render_widget(status, layout[2]);
+    frame.render_widget(status, layout[3]);
 }
 
 fn draw_calendar_widget(selected_day: NaiveDate) -> Paragraph<'static> {

@@ -76,6 +76,16 @@ impl AppState {
         }
     }
 
+    pub fn delete_todo(&mut self, id: Uuid) -> Result<(), String> {
+        let pos = self
+            .todos
+            .iter()
+            .position(|todo| todo.id == id)
+            .ok_or_else(|| "todo not found".to_string())?;
+        self.todos.remove(pos);
+        Ok(())
+    }
+
     pub fn select_next_day(&mut self) {
         if let Some(next) = self.selected_day.succ_opt() {
             self.selected_day = next;
