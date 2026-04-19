@@ -128,3 +128,29 @@ fn delete_missing_id_returns_error() -> Result<(), String> {
     assert!(err.is_err());
     Ok(())
 }
+
+#[test]
+fn edit_updates_title_priority_and_date() -> Result<(), String> {
+    let day = date(2026, 4, 18)?;
+    let mut state = AppState::new_for_date(day);
+    let id = state.add_todo("old", Priority::Low, day);
+    let target = date(2026, 4, 23)?;
+
+    state.update_todo(id, "new".to_string(), Priority::High, target)?;
+
+    let todo = state
+        .todo(id)
+        .ok_or_else(|| "todo missing after edit".to_string())?;
+    assert_eq!(todo.title, "new");
+    assert_eq!(todo.priority, Priority::High);
+    assert_eq!(todo.assigned_day, target);
+    Ok(())
+}
+
+#[test]
+fn shift_month_date_clamps() -> Result<(), String> {
+    let jan_31 = date(2026, 1, 31)?;
+    let feb = dayroll::app::shift_month_date(jan_31, 1)?;
+    assert_eq!(feb, date(2026, 2, 28)?);
+    Ok(())
+}

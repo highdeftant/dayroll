@@ -86,6 +86,25 @@ impl AppState {
         Ok(())
     }
 
+    pub fn update_todo(
+        &mut self,
+        id: Uuid,
+        title: String,
+        priority: Priority,
+        assigned_day: NaiveDate,
+    ) -> Result<(), String> {
+        let todo = self
+            .todos
+            .iter_mut()
+            .find(|todo| todo.id == id)
+            .ok_or_else(|| "todo not found".to_string())?;
+
+        todo.title = title;
+        todo.priority = priority;
+        todo.assigned_day = assigned_day;
+        Ok(())
+    }
+
     pub fn select_next_day(&mut self) {
         if let Some(next) = self.selected_day.succ_opt() {
             self.selected_day = next;
@@ -207,6 +226,10 @@ fn shift_month(day: NaiveDate, delta_months: i32) -> Result<NaiveDate, String> {
     NaiveDate::from_ymd_opt(new_year, new_month, day_clamped).ok_or_else(|| {
         format!("failed to build shifted date: {new_year}-{new_month}-{day_clamped}")
     })
+}
+
+pub fn shift_month_date(day: NaiveDate, delta_months: i32) -> Result<NaiveDate, String> {
+    shift_month(day, delta_months)
 }
 
 fn days_in_month(year: i32, month: u32) -> Result<u32, String> {

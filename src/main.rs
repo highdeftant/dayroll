@@ -2,13 +2,13 @@ use std::error::Error;
 use std::io;
 use std::time::Duration;
 
-use chrono::{Datelike, Local, NaiveDate};
+use chrono::{Datelike, Days, Local, NaiveDate};
 use crossterm::ExecutableCommand;
 use crossterm::event::{self, Event, KeyCode};
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use dayroll::app::{AppState, DayBuckets, month_grid, viewport_window};
+use dayroll::app::{AppState, DayBuckets, month_grid, shift_month_date, viewport_window};
 use dayroll::model::{Priority, Status};
 use dayroll::storage::{Store, TodoStore};
 use ratatui::Terminal;
@@ -16,7 +16,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
-    Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+    Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
 };
 
 const COLOR_VOID: Color = Color::Rgb(24, 28, 34);
@@ -35,6 +35,36 @@ struct VisibleTodo {
     status: Status,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TaskFormField {
+    Title,
+    Priority,
+    Date,
+}
+
+#[derive(Debug, Clone)]
+struct TaskFormState {
+    todo_id: Option<uuid::Uuid>,
+    title: String,
+    priority: Priority,
+    date: NaiveDate,
+    field: TaskFormField,
+    error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct MoveDateState {
+    todo_id: uuid::Uuid,
+    date: NaiveDate,
+}
+
+#[derive(Debug, Clone)]
+enum ModalState {
+    None,
+    TaskForm(TaskFormState),
+    MoveDate(MoveDateState),
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let result = run_app();
     if let Err(error) = result {
@@ -50,6 +80,7 @@ fn run_app() -> Result<(), String> {
     let todos = store.load()?;
     let mut app = AppState::with_todos(today, todos);
     let mut selected_index = 0usize;
+    let mut modal = ModalState::None;
 
     enable_raw_mode().map_err(|error| format!("failed to enable raw mode: {error}"))?;
     let mut stdout = io::stdout();
@@ -70,7 +101,7 @@ fn run_app() -> Result<(), String> {
         }
 
         terminal
-            .draw(|frame| draw_ui(frame, &app, &visible_rows, selected_index))
+            .draw(|frame| draw_ui(frame, &app, &visible_rows, selected_index, &modal))
             .map_err(|error| format!("draw failed: {error}"))?;
 
         if !event::poll(Duration::from_millis(250))
@@ -84,6 +115,11 @@ fn run_app() -> Result<(), String> {
                 Event::Key(key) => key,
                 _ => continue,
             };
+
+        if !matches!(modal, ModalState::None) {
+            handle_modal_event(key_event.code, &mut modal, &mut app, &store)?;
+            continue;
+        }
 
         match key_event.code {
             KeyCode::Char('q') | KeyCode::Esc => break,
@@ -109,19 +145,36 @@ fn run_app() -> Result<(), String> {
                 selected_index = 0;
             }
             KeyCode::Char('a') => {
-                let title = format!("New task {}", Local::now().format("%H:%M:%S"));
-                app.add_todo(title, Priority::Medium, app.selected_day());
-                store.save(app.todos())?;
+                modal = ModalState::TaskForm(TaskFormState {
+                    todo_id: None,
+                    title: String::new(),
+                    priority: Priority::Medium,
+                    date: app.selected_day(),
+                    field: TaskFormField::Title,
+                    error: None,
+                });
+            }
+            KeyCode::Char('e') => {
+                if let Some(row) = visible_rows.get(selected_index) {
+                    if let Some(todo) = app.todo(row.id) {
+                        modal = ModalState::TaskForm(TaskFormState {
+                            todo_id: Some(todo.id),
+                            title: todo.title.clone(),
+                            priority: todo.priority,
+                            date: todo.assigned_day,
+                            field: TaskFormField::Title,
+                            error: None,
+                        });
+                    }
+                }
             }
             KeyCode::Char('m') => {
                 if let Some(row) = visible_rows.get(selected_index) {
                     if let Some(todo) = app.todo(row.id) {
-                        let next_day = match todo.assigned_day.succ_opt() {
-                            Some(day) => day,
-                            None => todo.assigned_day,
-                        };
-                        app.move_todo(row.id, next_day)?;
-                        store.save(app.todos())?;
+                        modal = ModalState::MoveDate(MoveDateState {
+                            todo_id: todo.id,
+                            date: todo.assigned_day,
+                        });
                     }
                 }
             }
@@ -159,6 +212,178 @@ fn run_app() -> Result<(), String> {
     Ok(())
 }
 
+fn handle_modal_event(
+    key: KeyCode,
+    modal: &mut ModalState,
+    app: &mut AppState,
+    store: &Store,
+) -> Result<(), String> {
+    match modal {
+        ModalState::None => Ok(()),
+        ModalState::MoveDate(state) => {
+            match key {
+                KeyCode::Esc => *modal = ModalState::None,
+                KeyCode::Enter => {
+                    app.move_todo(state.todo_id, state.date)?;
+                    store.save(app.todos())?;
+                    *modal = ModalState::None;
+                }
+                KeyCode::Left => state.date = shift_days(state.date, -1),
+                KeyCode::Right => state.date = shift_days(state.date, 1),
+                KeyCode::Up => state.date = shift_days(state.date, -7),
+                KeyCode::Down => state.date = shift_days(state.date, 7),
+                KeyCode::Char('{') | KeyCode::Char('H') => {
+                    if let Ok(day) = shift_month_date(state.date, -1) {
+                        state.date = day;
+                    }
+                }
+                KeyCode::Char('}') | KeyCode::Char('L') => {
+                    if let Ok(day) = shift_month_date(state.date, 1) {
+                        state.date = day;
+                    }
+                }
+                _ => {}
+            }
+            Ok(())
+        }
+        ModalState::TaskForm(form) => {
+            match key {
+                KeyCode::Esc => *modal = ModalState::None,
+                KeyCode::Tab => {
+                    form.field = next_field(form.field);
+                    form.error = None;
+                }
+                KeyCode::BackTab => {
+                    form.field = prev_field(form.field);
+                    form.error = None;
+                }
+                KeyCode::Enter => {
+                    let title = form.title.trim().to_string();
+                    if title.is_empty() {
+                        form.error = Some("title cannot be empty".to_string());
+                        return Ok(());
+                    }
+
+                    if let Some(id) = form.todo_id {
+                        app.update_todo(id, title, form.priority, form.date)?;
+                    } else {
+                        app.add_todo(title, form.priority, form.date);
+                    }
+
+                    store.save(app.todos())?;
+                    *modal = ModalState::None;
+                }
+                KeyCode::Backspace => {
+                    if form.field == TaskFormField::Title {
+                        form.title.pop();
+                    }
+                }
+                KeyCode::Char('p') => {
+                    if form.field == TaskFormField::Priority {
+                        form.priority = cycle_priority(form.priority);
+                    }
+                }
+                KeyCode::Char('h') => {
+                    if form.field == TaskFormField::Priority {
+                        form.priority = Priority::High;
+                    } else {
+                        form.title.push('h');
+                    }
+                }
+                KeyCode::Char('l') => {
+                    if form.field == TaskFormField::Priority {
+                        form.priority = Priority::Low;
+                    } else {
+                        form.title.push('l');
+                    }
+                }
+                KeyCode::Char('m') => {
+                    if form.field == TaskFormField::Priority {
+                        form.priority = Priority::Medium;
+                    } else {
+                        form.title.push('m');
+                    }
+                }
+                KeyCode::Left if form.field == TaskFormField::Date => {
+                    form.date = shift_days(form.date, -1);
+                }
+                KeyCode::Right if form.field == TaskFormField::Date => {
+                    form.date = shift_days(form.date, 1);
+                }
+                KeyCode::Up if form.field == TaskFormField::Date => {
+                    form.date = shift_days(form.date, -7);
+                }
+                KeyCode::Down if form.field == TaskFormField::Date => {
+                    form.date = shift_days(form.date, 7);
+                }
+                KeyCode::Char('{') | KeyCode::Char('H') if form.field == TaskFormField::Date => {
+                    if let Ok(day) = shift_month_date(form.date, -1) {
+                        form.date = day;
+                    }
+                }
+                KeyCode::Char('}') | KeyCode::Char('L') if form.field == TaskFormField::Date => {
+                    if let Ok(day) = shift_month_date(form.date, 1) {
+                        form.date = day;
+                    }
+                }
+                KeyCode::Char(c) => {
+                    if form.field == TaskFormField::Title && !c.is_control() {
+                        form.title.push(c);
+                    }
+                }
+                _ => {}
+            }
+            Ok(())
+        }
+    }
+}
+
+fn next_field(field: TaskFormField) -> TaskFormField {
+    match field {
+        TaskFormField::Title => TaskFormField::Priority,
+        TaskFormField::Priority => TaskFormField::Date,
+        TaskFormField::Date => TaskFormField::Title,
+    }
+}
+
+fn prev_field(field: TaskFormField) -> TaskFormField {
+    match field {
+        TaskFormField::Title => TaskFormField::Date,
+        TaskFormField::Priority => TaskFormField::Title,
+        TaskFormField::Date => TaskFormField::Priority,
+    }
+}
+
+fn cycle_priority(priority: Priority) -> Priority {
+    match priority {
+        Priority::High => Priority::Medium,
+        Priority::Medium => Priority::Low,
+        Priority::Low => Priority::High,
+    }
+}
+
+fn shift_days(day: NaiveDate, delta_days: i64) -> NaiveDate {
+    if delta_days >= 0 {
+        let abs = match u64::try_from(delta_days) {
+            Ok(value) => value,
+            Err(_) => return day,
+        };
+        match day.checked_add_days(Days::new(abs)) {
+            Some(next) => next,
+            None => day,
+        }
+    } else {
+        let abs = match u64::try_from(-delta_days) {
+            Ok(value) => value,
+            Err(_) => return day,
+        };
+        match day.checked_sub_days(Days::new(abs)) {
+            Some(prev) => prev,
+            None => day,
+        }
+    }
+}
+
 fn visible_todos(app: &AppState) -> Vec<VisibleTodo> {
     let buckets = DayBuckets::for_day(app.selected_day(), app.todos());
     let mut rows = Vec::new();
@@ -189,6 +414,7 @@ fn draw_ui(
     app: &AppState,
     visible_rows: &[VisibleTodo],
     selected_index: usize,
+    modal: &ModalState,
 ) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
@@ -236,11 +462,10 @@ fn draw_ui(
     );
 
     let calendar = draw_calendar_widget(app.selected_day());
-
     let tasks = draw_tasks_widget(layout[2], visible_rows, selected_index);
 
     let status = Paragraph::new(
-        "[a] add [d] delete [space/enter] toggle [m] move +1d [[/]] day [{/}] month [t] today [q] quit",
+        "[a] add [e] edit [m] move [d] delete [enter] done [[/]] day [{/}] month [t] today [q] quit",
     )
     .style(Style::default().fg(COLOR_GHOST).bg(COLOR_VOID))
     .block(
@@ -258,6 +483,121 @@ fn draw_ui(
     }
 
     frame.render_widget(status, layout[3]);
+
+    draw_modal(frame, modal);
+}
+
+fn draw_modal(frame: &mut ratatui::Frame<'_>, modal: &ModalState) {
+    match modal {
+        ModalState::None => {}
+        ModalState::MoveDate(state) => {
+            let area = centered_rect(60, 35, frame.area());
+            frame.render_widget(Clear, area);
+            let text = vec![
+                Line::from("Move task date"),
+                Line::from(""),
+                Line::from(format!("Selected: {}", state.date)),
+                Line::from("←/→ day  ↑/↓ week  {/} month"),
+                Line::from("Enter apply, Esc cancel"),
+            ];
+            let widget = Paragraph::new(text).block(
+                Block::default()
+                    .title("Date Picker")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(COLOR_CYAN)),
+            );
+            frame.render_widget(widget, area);
+        }
+        ModalState::TaskForm(form) => {
+            let area = centered_rect(70, 45, frame.area());
+            frame.render_widget(Clear, area);
+            let mode = if form.todo_id.is_some() {
+                "Edit Task"
+            } else {
+                "Add Task"
+            };
+
+            let title_style = if form.field == TaskFormField::Title {
+                Style::default()
+                    .fg(COLOR_AMBER)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(COLOR_GHOST)
+            };
+            let prio_style = if form.field == TaskFormField::Priority {
+                Style::default()
+                    .fg(COLOR_AMBER)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(COLOR_GHOST)
+            };
+            let date_style = if form.field == TaskFormField::Date {
+                Style::default()
+                    .fg(COLOR_AMBER)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(COLOR_GHOST)
+            };
+
+            let mut text = vec![
+                Line::from(Span::styled(
+                    mode,
+                    Style::default().add_modifier(Modifier::BOLD),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(format!("Title: {}", form.title), title_style)),
+                Line::from(Span::styled(
+                    format!("Priority: {:?}  (p/h/m/l)", form.priority),
+                    prio_style,
+                )),
+                Line::from(Span::styled(
+                    format!("Date: {}  (←/→ day, ↑/↓ week, {{/}} month)", form.date),
+                    date_style,
+                )),
+                Line::from(""),
+                Line::from("Tab/Shift+Tab switch field"),
+                Line::from("Enter save, Esc cancel"),
+            ];
+
+            if let Some(error) = &form.error {
+                text.push(Line::from(""));
+                text.push(Line::from(Span::styled(
+                    format!("Error: {error}"),
+                    Style::default().fg(COLOR_RED),
+                )));
+            }
+
+            let widget = Paragraph::new(text).block(
+                Block::default()
+                    .title("Task Form")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(COLOR_CYAN)),
+            );
+            frame.render_widget(widget, area);
+        }
+    }
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100u16.saturating_sub(percent_y)) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100u16.saturating_sub(percent_y)) / 2),
+        ])
+        .split(area);
+
+    let horizontal = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100u16.saturating_sub(percent_x)) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100u16.saturating_sub(percent_x)) / 2),
+        ])
+        .split(vertical[1]);
+
+    horizontal[1]
 }
 
 fn draw_calendar_widget(selected_day: NaiveDate) -> Paragraph<'static> {
