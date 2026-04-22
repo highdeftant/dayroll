@@ -154,8 +154,11 @@ fn run_app() -> Result<(), String> {
                     error: None,
                 });
             }
-            KeyCode::Char('e') => {
+            KeyCode::Char('e') =>
+            {
+                #[allow(clippy::collapsible_if)]
                 if let Some(row) = visible_rows.get(selected_index) {
+                    #[allow(clippy::collapsible_if)]
                     if let Some(todo) = app.todo(row.id) {
                         modal = ModalState::TaskForm(TaskFormState {
                             todo_id: Some(todo.id),
@@ -168,8 +171,11 @@ fn run_app() -> Result<(), String> {
                     }
                 }
             }
-            KeyCode::Char('m') => {
+            KeyCode::Char('m') =>
+            {
+                #[allow(clippy::collapsible_if)]
                 if let Some(row) = visible_rows.get(selected_index) {
+                    #[allow(clippy::collapsible_if)]
                     if let Some(todo) = app.todo(row.id) {
                         modal = ModalState::MoveDate(MoveDateState {
                             todo_id: todo.id,
@@ -199,6 +205,20 @@ fn run_app() -> Result<(), String> {
                 if selected_index > 0 {
                     selected_index = selected_index.saturating_sub(1);
                 }
+            }
+            KeyCode::Char(c) => {
+                // Search input: accumulate characters
+                if !c.is_control() {
+                    let mut query = app.search_query().to_string();
+                    query.push(c);
+                    app.set_search_query(query);
+                }
+            }
+            KeyCode::Backspace => {
+                // Remove last character from search
+                let mut query = app.search_query().to_string();
+                query.pop();
+                app.set_search_query(query);
             }
             _ => {}
         }
@@ -386,9 +406,10 @@ fn shift_days(day: NaiveDate, delta_days: i64) -> NaiveDate {
 
 fn visible_todos(app: &AppState) -> Vec<VisibleTodo> {
     let buckets = DayBuckets::for_day(app.selected_day(), app.todos());
+    let filtered_buckets = buckets.filter_by_query(app.search_query());
     let mut rows = Vec::new();
 
-    for todo in &buckets.overdue {
+    for todo in &filtered_buckets.overdue {
         rows.push(VisibleTodo {
             id: todo.id,
             label: format!("{} ({})", todo.title, todo.assigned_day),
@@ -397,7 +418,7 @@ fn visible_todos(app: &AppState) -> Vec<VisibleTodo> {
         });
     }
 
-    for todo in &buckets.today {
+    for todo in &filtered_buckets.today {
         rows.push(VisibleTodo {
             id: todo.id,
             label: todo.title.clone(),
@@ -436,6 +457,11 @@ fn draw_ui(
         .iter()
         .filter(|todo| todo.status == Status::Done)
         .count();
+    let filter_indicator = if app.search_query().is_empty() {
+        String::new()
+    } else {
+        format!(" [filter: {}] ", app.search_query())
+    };
 
     let title = Paragraph::new(Line::from(vec![
         Span::styled(
@@ -446,10 +472,11 @@ fn draw_ui(
         ),
         Span::styled(
             format!(
-                " {}  pending:{} done:{} ",
+                " {}  pending:{} done:{}{} ",
                 app.selected_day(),
                 pending_count,
-                done_count
+                done_count,
+                filter_indicator
             ),
             Style::default().fg(COLOR_GREEN),
         ),
@@ -465,7 +492,7 @@ fn draw_ui(
     let tasks = draw_tasks_widget(layout[2], visible_rows, selected_index);
 
     let status = Paragraph::new(
-        "[a] add [e] edit [m] move [d] delete [enter] done [[/]] day [{/}] month [t] today [q] quit",
+        "[a] add [e] edit [m] move [d] delete [/] search [enter/space] done [[/]] day [{/}] month [t] today [q] quit",
     )
     .style(Style::default().fg(COLOR_GHOST).bg(COLOR_VOID))
     .block(

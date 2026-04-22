@@ -7,6 +7,7 @@ use crate::model::{Priority, Status, Todo};
 pub struct AppState {
     selected_day: NaiveDate,
     todos: Vec<Todo>,
+    search_query: String,
 }
 
 #[derive(Debug, Clone)]
@@ -20,6 +21,7 @@ impl AppState {
         Self {
             selected_day: day,
             todos: Vec::new(),
+            search_query: String::new(),
         }
     }
 
@@ -27,6 +29,7 @@ impl AppState {
         Self {
             selected_day: day,
             todos,
+            search_query: String::new(),
         }
     }
 
@@ -36,6 +39,14 @@ impl AppState {
 
     pub fn set_selected_day(&mut self, day: NaiveDate) {
         self.selected_day = day;
+    }
+
+    pub fn search_query(&self) -> &str {
+        &self.search_query
+    }
+
+    pub fn set_search_query(&mut self, query: String) {
+        self.search_query = query;
     }
 
     pub fn add_todo(
@@ -153,6 +164,28 @@ impl DayBuckets {
             .collect::<Vec<_>>();
 
         Self { overdue, today }
+    }
+
+    pub fn filter_by_query(&self, query: &str) -> Self {
+        let query_lower = query.to_lowercase();
+        let filtered_overdue = self
+            .overdue
+            .iter()
+            .filter(|todo| query.is_empty() || todo.title.to_lowercase().contains(&query_lower))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let filtered_today = self
+            .today
+            .iter()
+            .filter(|todo| query.is_empty() || todo.title.to_lowercase().contains(&query_lower))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        Self {
+            overdue: filtered_overdue,
+            today: filtered_today,
+        }
     }
 }
 
