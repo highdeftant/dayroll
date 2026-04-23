@@ -333,31 +333,11 @@ fn handle_modal_event(
                         form.title.pop();
                     }
                 }
-                KeyCode::Char('p') => {
-                    if form.field == TaskFormField::Priority {
-                        form.priority = cycle_priority(form.priority);
-                    }
+                KeyCode::Left if form.field == TaskFormField::Priority => {
+                    form.priority = prev_priority(form.priority);
                 }
-                KeyCode::Char('h') => {
-                    if form.field == TaskFormField::Priority {
-                        form.priority = Priority::High;
-                    } else {
-                        form.title.push('h');
-                    }
-                }
-                KeyCode::Char('l') => {
-                    if form.field == TaskFormField::Priority {
-                        form.priority = Priority::Low;
-                    } else {
-                        form.title.push('l');
-                    }
-                }
-                KeyCode::Char('m') => {
-                    if form.field == TaskFormField::Priority {
-                        form.priority = Priority::Medium;
-                    } else {
-                        form.title.push('m');
-                    }
+                KeyCode::Right if form.field == TaskFormField::Priority => {
+                    form.priority = next_priority(form.priority);
                 }
                 KeyCode::Left if form.field == TaskFormField::Date => {
                     form.date = shift_days(form.date, -1);
@@ -409,11 +389,19 @@ fn prev_field(field: TaskFormField) -> TaskFormField {
     }
 }
 
-fn cycle_priority(priority: Priority) -> Priority {
+fn next_priority(priority: Priority) -> Priority {
     match priority {
         Priority::High => Priority::Medium,
         Priority::Medium => Priority::Low,
-        Priority::Low => Priority::High,
+        Priority::Low => Priority::Low,
+    }
+}
+
+fn prev_priority(priority: Priority) -> Priority {
+    match priority {
+        Priority::High => Priority::High,
+        Priority::Medium => Priority::High,
+        Priority::Low => Priority::Medium,
     }
 }
 
@@ -658,7 +646,7 @@ fn draw_modal(frame: &mut ratatui::Frame<'_>, modal: &ModalState) {
                 Line::from(""),
                 Line::from(Span::styled(format!("Title: {}", form.title), title_style)),
                 Line::from(Span::styled(
-                    format!("Priority: {:?}  (p/h/m/l)", form.priority),
+                    format!("Priority: {:?}  (←/→ change)", form.priority),
                     prio_style,
                 )),
                 Line::from(Span::styled(
