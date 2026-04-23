@@ -8,6 +8,7 @@ pub struct AppState {
     selected_day: NaiveDate,
     todos: Vec<Todo>,
     search_query: String,
+    search_active: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,12 +24,30 @@ pub struct DayBuckets {
     pub today: Vec<Todo>,
 }
 
+#[derive(Debug, Clone)]
+pub enum UndoAction {
+    Delete {
+        todo: Todo,
+        index: usize,
+    },
+    Move {
+        id: Uuid,
+        previous_day: NaiveDate,
+    },
+    Toggle {
+        id: Uuid,
+        previous_status: Status,
+        previous_completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    },
+}
+
 impl AppState {
     pub fn new_for_date(day: NaiveDate) -> Self {
         Self {
             selected_day: day,
             todos: Vec::new(),
             search_query: String::new(),
+            search_active: false,
         }
     }
 
@@ -37,6 +56,7 @@ impl AppState {
             selected_day: day,
             todos,
             search_query: String::new(),
+            search_active: false,
         }
     }
 
@@ -52,8 +72,31 @@ impl AppState {
         &self.search_query
     }
 
+    pub fn search_active(&self) -> bool {
+        self.search_active
+    }
+
+    pub fn activate_search(&mut self) {
+        self.search_active = true;
+    }
+
+    pub fn append_search_char(&mut self, character: char) {
+        self.search_active = true;
+        self.search_query.push(character);
+    }
+
+    pub fn pop_search_char(&mut self) {
+        self.search_query.pop();
+    }
+
+    pub fn clear_search(&mut self) {
+        self.search_query.clear();
+        self.search_active = false;
+    }
+
     pub fn set_search_query(&mut self, query: String) {
         self.search_query = query;
+        self.search_active = !self.search_query.is_empty();
     }
 
     pub fn add_todo(
@@ -78,6 +121,21 @@ impl AppState {
         }
     }
 
+    pub fn move_todo_with_undo(
+        &mut self,
+        id: Uuid,
+        target_day: NaiveDate,
+    ) -> Result<UndoAction, String> {
+        let previous_day = self
+            .todos
+            .iter()
+            .find(|todo| todo.id == id)
+            .map(|todo| todo.assigned_day)
+            .ok_or_else(|| "todo not found".to_string())?;
+        self.move_todo(id, target_day)?;
+        Ok(UndoAction::Move { id, previous_day })
+    }
+
     pub fn toggle_done(&mut self, id: Uuid) -> Result<(), String> {
         match self.todos.iter_mut().find(|todo| todo.id == id) {
             Some(todo) => {
@@ -94,6 +152,21 @@ impl AppState {
         }
     }
 
+    pub fn toggle_done_with_undo(&mut self, id: Uuid) -> Result<UndoAction, String> {
+        let todo = self
+            .todos
+            .iter()
+            .find(|todo| todo.id == id)
+            .ok_or_else(|| "todo not found".to_string())?;
+        let undo = UndoAction::Toggle {
+            id,
+            previous_status: todo.status,
+            previous_completed_at: todo.completed_at,
+        };
+        self.toggle_done(id)?;
+        Ok(undo)
+    }
+
     pub fn delete_todo(&mut self, id: Uuid) -> Result<(), String> {
         let pos = self
             .todos
@@ -102,6 +175,46 @@ impl AppState {
             .ok_or_else(|| "todo not found".to_string())?;
         self.todos.remove(pos);
         Ok(())
+    }
+
+    pub fn delete_todo_with_undo(&mut self, id: Uuid) -> Result<UndoAction, String> {
+        let pos = self
+            .todos
+            .iter()
+            .position(|todo| todo.id == id)
+            .ok_or_else(|| "todo not found".to_string())?;
+        let todo = self
+            .todos
+            .get(pos)
+            .cloned()
+            .ok_or_else(|| "todo not found".to_string())?;
+        self.todos.remove(pos);
+        Ok(UndoAction::Delete { todo, index: pos })
+    }
+
+    pub fn apply_undo(&mut self, undo: UndoAction) -> Result<(), String> {
+        match undo {
+            UndoAction::Delete { todo, index } => {
+                let insert_at = index.min(self.todos.len());
+                self.todos.insert(insert_at, todo);
+                Ok(())
+            }
+            UndoAction::Move { id, previous_day } => self.move_todo(id, previous_day),
+            UndoAction::Toggle {
+                id,
+                previous_status,
+                previous_completed_at,
+            } => {
+                let todo = self
+                    .todos
+                    .iter_mut()
+                    .find(|todo| todo.id == id)
+                    .ok_or_else(|| "todo not found".to_string())?;
+                todo.status = previous_status;
+                todo.completed_at = previous_completed_at;
+                Ok(())
+            }
+        }
     }
 
     pub fn update_todo(
@@ -288,9 +401,15 @@ pub fn request_quit_overlay(current: Overlay) -> Overlay {
     }
 }
 
-pub fn footer_hint(overlay: Overlay) -> &'static str {
+pub fn footer_hint(overlay: Overlay, search_active: bool) -> &'static str {
     match overlay {
-        Overlay::None => "[?] help [q] quit [j/k] move [enter] done",
+        Overlay::None => {
+            if search_active {
+                "[search] type to filter [Backspace] delete [Esc] clear"
+            } else {
+                "[?] help [/] search [u] undo [q] quit [j/k] move [enter] done"
+            }
+        }
         Overlay::Help => "[Esc/?] close help",
         Overlay::QuitConfirm => "[y] quit [n/Esc] cancel",
     }

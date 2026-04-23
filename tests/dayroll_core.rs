@@ -172,7 +172,101 @@ fn quit_request_opens_confirmation_from_normal_mode() {
 
 #[test]
 fn footer_hint_is_short_in_normal_mode() {
-    let hint = dayroll::app::footer_hint(dayroll::app::Overlay::None);
+    let hint = dayroll::app::footer_hint(dayroll::app::Overlay::None, false);
     assert!(hint.contains("[?] help"));
     assert!(!hint.contains("delete"));
+}
+
+#[test]
+fn search_mode_starts_inactive_and_can_be_cleared() -> Result<(), String> {
+    let day = date(2026, 4, 18)?;
+    let mut state = AppState::new_for_date(day);
+    assert!(!state.search_active());
+
+    state.activate_search();
+    assert!(state.search_active());
+
+    state.append_search_char('r');
+    state.append_search_char('e');
+    assert_eq!(state.search_query(), "re");
+
+    state.clear_search();
+    assert!(!state.search_active());
+    assert!(state.search_query().is_empty());
+    Ok(())
+}
+
+#[test]
+fn active_search_footer_hint_explains_escape() {
+    let hint = dayroll::app::footer_hint(dayroll::app::Overlay::None, true);
+    assert!(hint.contains("search"));
+    assert!(hint.contains("Esc"));
+}
+
+#[test]
+fn undo_restore_after_delete_reinserts_task() -> Result<(), String> {
+    let day = date(2026, 4, 18)?;
+    let mut state = AppState::new_for_date(day);
+    let first_id = state.add_todo("first", Priority::Low, day);
+    let second_id = state.add_todo("second", Priority::High, day);
+
+    let undo = state.delete_todo_with_undo(first_id)?;
+    assert!(state.todo(first_id).is_none());
+
+    state.apply_undo(undo)?;
+    assert_eq!(state.todos().len(), 2);
+    assert_eq!(state.todos()[0].id, first_id);
+    assert_eq!(state.todos()[1].id, second_id);
+    Ok(())
+}
+
+#[test]
+fn undo_restore_after_move_returns_original_day() -> Result<(), String> {
+    let day = date(2026, 4, 18)?;
+    let target = date(2026, 4, 22)?;
+    let mut state = AppState::new_for_date(day);
+    let id = state.add_todo("move me", Priority::Medium, day);
+
+    let undo = state.move_todo_with_undo(id, target)?;
+    assert_eq!(
+        state
+            .todo(id)
+            .ok_or_else(|| "missing moved todo".to_string())?
+            .assigned_day,
+        target
+    );
+
+    state.apply_undo(undo)?;
+    assert_eq!(
+        state
+            .todo(id)
+            .ok_or_else(|| "missing restored todo".to_string())?
+            .assigned_day,
+        day
+    );
+    Ok(())
+}
+
+#[test]
+fn undo_restore_after_toggle_returns_previous_status() -> Result<(), String> {
+    let day = date(2026, 4, 18)?;
+    let mut state = AppState::new_for_date(day);
+    let id = state.add_todo("toggle me", Priority::Medium, day);
+
+    let undo = state.toggle_done_with_undo(id)?;
+    assert!(
+        state
+            .todo(id)
+            .ok_or_else(|| "missing toggled todo".to_string())?
+            .completed_at
+            .is_some()
+    );
+
+    state.apply_undo(undo)?;
+    let todo = state
+        .todo(id)
+        .ok_or_else(|| "missing restored todo".to_string())?;
+    assert!(todo.completed_at.is_none());
+    assert_eq!(todo.status, dayroll::model::Status::Pending);
+    Ok(())
 }

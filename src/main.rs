@@ -9,8 +9,8 @@ use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use dayroll::app::{
-    AppState, DayBuckets, Overlay, footer_hint, month_grid, request_quit_overlay, shift_month_date,
-    toggle_help_overlay, viewport_window,
+    AppState, DayBuckets, Overlay, UndoAction, footer_hint, month_grid, request_quit_overlay,
+    shift_month_date, toggle_help_overlay, viewport_window,
 };
 use dayroll::model::{Priority, Status};
 use dayroll::storage::{Store, TodoStore};
@@ -85,6 +85,7 @@ fn run_app() -> Result<(), String> {
     let mut selected_index = 0usize;
     let mut modal = ModalState::None;
     let mut overlay = Overlay::None;
+    let mut pending_undo: Option<UndoAction> = None;
 
     enable_raw_mode().map_err(|error| format!("failed to enable raw mode: {error}"))?;
     let mut stdout = io::stdout();
@@ -122,7 +123,13 @@ fn run_app() -> Result<(), String> {
                 };
 
             if !matches!(modal, ModalState::None) {
-                handle_modal_event(key_event.code, &mut modal, &mut app, &store)?;
+                handle_modal_event(
+                    key_event.code,
+                    &mut modal,
+                    &mut app,
+                    &store,
+                    &mut pending_undo,
+                )?;
                 continue;
             }
 
@@ -143,10 +150,21 @@ fn run_app() -> Result<(), String> {
                 continue;
             }
 
+            if handle_search_key(key_event.code, &mut app) {
+                continue;
+            }
+
             match key_event.code {
                 KeyCode::Char('q') => overlay = request_quit_overlay(overlay),
-                KeyCode::Esc => overlay = Overlay::QuitConfirm,
+                KeyCode::Esc => {
+                    if app.search_active() {
+                        app.clear_search();
+                    } else {
+                        overlay = Overlay::QuitConfirm;
+                    }
+                }
                 KeyCode::Char('?') => overlay = toggle_help_overlay(overlay),
+                KeyCode::Char('/') => app.activate_search(),
                 KeyCode::Char(']') | KeyCode::Right => {
                     app.select_next_day();
                     selected_index = 0;
@@ -204,15 +222,21 @@ fn run_app() -> Result<(), String> {
                         });
                     }
                 }
+                KeyCode::Char('u') => {
+                    if let Some(undo) = pending_undo.take() {
+                        app.apply_undo(undo)?;
+                        store.save(app.todos())?;
+                    }
+                }
                 KeyCode::Char('d') => {
                     if let Some(row) = visible_rows.get(selected_index) {
-                        app.delete_todo(row.id)?;
+                        pending_undo = Some(app.delete_todo_with_undo(row.id)?);
                         store.save(app.todos())?;
                     }
                 }
                 KeyCode::Enter | KeyCode::Char(' ') => {
                     if let Some(row) = visible_rows.get(selected_index) {
-                        app.toggle_done(row.id)?;
+                        pending_undo = Some(app.toggle_done_with_undo(row.id)?);
                         store.save(app.todos())?;
                     }
                 }
@@ -227,16 +251,14 @@ fn run_app() -> Result<(), String> {
                     }
                 }
                 KeyCode::Char(c) => {
-                    if !c.is_control() {
-                        let mut query = app.search_query().to_string();
-                        query.push(c);
-                        app.set_search_query(query);
+                    if app.search_active() && !c.is_control() {
+                        app.append_search_char(c);
                     }
                 }
                 KeyCode::Backspace => {
-                    let mut query = app.search_query().to_string();
-                    query.pop();
-                    app.set_search_query(query);
+                    if app.search_active() {
+                        app.pop_search_char();
+                    }
                 }
                 _ => {}
             }
@@ -267,11 +289,37 @@ fn cleanup_terminal(
     Ok(())
 }
 
+fn handle_search_key(key: KeyCode, app: &mut AppState) -> bool {
+    if app.search_active() {
+        match key {
+            KeyCode::Esc => {
+                app.clear_search();
+                true
+            }
+            KeyCode::Backspace => {
+                app.pop_search_char();
+                true
+            }
+            KeyCode::Char(c) if !c.is_control() => {
+                app.append_search_char(c);
+                true
+            }
+            _ => true,
+        }
+    } else if matches!(key, KeyCode::Char('/')) {
+        app.activate_search();
+        true
+    } else {
+        false
+    }
+}
+
 fn handle_modal_event(
     key: KeyCode,
     modal: &mut ModalState,
     app: &mut AppState,
     store: &Store,
+    pending_undo: &mut Option<UndoAction>,
 ) -> Result<(), String> {
     match modal {
         ModalState::None => Ok(()),
@@ -279,7 +327,7 @@ fn handle_modal_event(
             match key {
                 KeyCode::Esc => *modal = ModalState::None,
                 KeyCode::Enter => {
-                    app.move_todo(state.todo_id, state.date)?;
+                    *pending_undo = Some(app.move_todo_with_undo(state.todo_id, state.date)?);
                     store.save(app.todos())?;
                     *modal = ModalState::None;
                 }
@@ -325,6 +373,7 @@ fn handle_modal_event(
                         app.add_todo(title, form.priority, form.date);
                     }
 
+                    *pending_undo = None;
                     store.save(app.todos())?;
                     *modal = ModalState::None;
                 }
@@ -481,10 +530,14 @@ fn draw_ui(
         .iter()
         .filter(|todo| todo.status == Status::Done)
         .count();
-    let filter_indicator = if app.search_query().is_empty() {
-        String::new()
+    let filter_indicator = if app.search_active() {
+        if app.search_query().is_empty() {
+            " [search] ".to_string()
+        } else {
+            format!(" [search: {}] ", app.search_query())
+        }
     } else {
-        format!(" [filter: {}] ", app.search_query())
+        String::new()
     };
 
     let title = Paragraph::new(Line::from(vec![
@@ -513,9 +566,15 @@ fn draw_ui(
     );
 
     let calendar = draw_calendar_widget(app.selected_day());
-    let tasks = draw_tasks_widget(layout[2], visible_rows, selected_index);
+    let tasks = draw_tasks_widget(
+        layout[2],
+        visible_rows,
+        selected_index,
+        app.search_active(),
+        app.search_query(),
+    );
 
-    let status = Paragraph::new(footer_hint(overlay))
+    let status = Paragraph::new(footer_hint(overlay, app.search_active()))
         .style(Style::default().fg(COLOR_GHOST).bg(COLOR_VOID))
         .block(
             Block::default()
@@ -555,7 +614,9 @@ fn draw_overlay(frame: &mut ratatui::Frame<'_>, overlay: Overlay) {
                 Line::from("d              delete selected task"),
                 Line::from("Enter/Space    toggle done"),
                 Line::from("t              jump to today"),
-                Line::from("type / backspace  filter tasks"),
+                Line::from("/              enter search"),
+                Line::from("search mode    type to filter, Esc clear"),
+                Line::from("u              undo last move/delete/toggle"),
                 Line::from("q              quit confirmation"),
                 Line::from("? or Esc       close this help"),
             ];
@@ -762,6 +823,8 @@ fn draw_tasks_widget(
     area: Rect,
     visible_rows: &[VisibleTodo],
     selected_index: usize,
+    search_active: bool,
+    search_query: &str,
 ) -> (
     Paragraph<'static>,
     Option<(Scrollbar<'static>, ScrollbarState, Rect)>,
@@ -771,7 +834,16 @@ fn draw_tasks_widget(
 
     let mut lines = Vec::<Line<'static>>::new();
     if visible_rows.is_empty() {
-        lines.push(Line::from("no tasks for selected day"));
+        if search_active {
+            let label = if search_query.is_empty() {
+                "search is active — type to filter tasks".to_string()
+            } else {
+                format!("no matches for search: {search_query}")
+            };
+            lines.push(Line::from(label));
+        } else {
+            lines.push(Line::from("no tasks for selected day"));
+        }
     } else {
         for (row_idx, row) in visible_rows.iter().enumerate().take(end).skip(start) {
             let marker = if row_idx == selected_index { ">" } else { " " };
@@ -844,4 +916,37 @@ fn month_name(month: u32) -> &'static str {
 
 fn status_symbol(status: Status) -> &'static str {
     if status == Status::Done { "✓" } else { " " }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::handle_search_key;
+    use chrono::NaiveDate;
+    use crossterm::event::KeyCode;
+    use dayroll::app::AppState;
+
+    fn date(year: i32, month: u32, day: u32) -> Result<NaiveDate, String> {
+        NaiveDate::from_ymd_opt(year, month, day)
+            .ok_or_else(|| format!("invalid date: {year:04}-{month:02}-{day:02}"))
+    }
+
+    #[test]
+    fn search_mode_consumes_command_letters_as_text() -> Result<(), String> {
+        let mut app = AppState::new_for_date(date(2026, 4, 18)?);
+        app.activate_search();
+
+        assert!(handle_search_key(KeyCode::Char('d'), &mut app));
+        assert_eq!(app.search_query(), "d");
+        Ok(())
+    }
+
+    #[test]
+    fn slash_enters_search_mode() -> Result<(), String> {
+        let mut app = AppState::new_for_date(date(2026, 4, 18)?);
+
+        assert!(handle_search_key(KeyCode::Char('/'), &mut app));
+        assert!(app.search_active());
+        assert!(app.search_query().is_empty());
+        Ok(())
+    }
 }
