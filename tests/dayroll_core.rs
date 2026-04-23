@@ -154,3 +154,25 @@ fn shift_month_date_clamps() -> Result<(), String> {
     assert_eq!(feb, date(2026, 2, 28)?);
     Ok(())
 }
+
+#[test]
+fn help_overlay_toggles_on_and_off() {
+    let shown = dayroll::app::toggle_help_overlay(dayroll::app::Overlay::None);
+    assert_eq!(shown, dayroll::app::Overlay::Help);
+
+    let hidden = dayroll::app::toggle_help_overlay(shown);
+    assert_eq!(hidden, dayroll::app::Overlay::None);
+}
+
+#[test]
+fn quit_request_opens_confirmation_from_normal_mode() {
+    let overlay = dayroll::app::request_quit_overlay(dayroll::app::Overlay::None);
+    assert_eq!(overlay, dayroll::app::Overlay::QuitConfirm);
+}
+
+#[test]
+fn footer_hint_is_short_in_normal_mode() {
+    let hint = dayroll::app::footer_hint(dayroll::app::Overlay::None);
+    assert!(hint.contains("[?] help"));
+    assert!(!hint.contains("delete"));
+}

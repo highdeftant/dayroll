@@ -8,7 +8,10 @@ use crossterm::event::{self, Event, KeyCode};
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use dayroll::app::{AppState, DayBuckets, month_grid, shift_month_date, viewport_window};
+use dayroll::app::{
+    AppState, DayBuckets, Overlay, footer_hint, month_grid, request_quit_overlay, shift_month_date,
+    toggle_help_overlay, viewport_window,
+};
 use dayroll::model::{Priority, Status};
 use dayroll::storage::{Store, TodoStore};
 use ratatui::Terminal;
@@ -81,6 +84,7 @@ fn run_app() -> Result<(), String> {
     let mut app = AppState::with_todos(today, todos);
     let mut selected_index = 0usize;
     let mut modal = ModalState::None;
+    let mut overlay = Overlay::None;
 
     enable_raw_mode().map_err(|error| format!("failed to enable raw mode: {error}"))?;
     let mut stdout = io::stdout();
@@ -91,75 +95,94 @@ fn run_app() -> Result<(), String> {
     let mut terminal =
         Terminal::new(backend).map_err(|error| format!("terminal init failed: {error}"))?;
 
-    loop {
-        let visible_rows = visible_todos(&app);
-        if selected_index >= visible_rows.len() && !visible_rows.is_empty() {
-            selected_index = visible_rows.len().saturating_sub(1);
-        }
-        if visible_rows.is_empty() {
-            selected_index = 0;
-        }
-
-        terminal
-            .draw(|frame| draw_ui(frame, &app, &visible_rows, selected_index, &modal))
-            .map_err(|error| format!("draw failed: {error}"))?;
-
-        if !event::poll(Duration::from_millis(250))
-            .map_err(|error| format!("event poll failed: {error}"))?
-        {
-            continue;
-        }
-
-        let key_event =
-            match event::read().map_err(|error| format!("event read failed: {error}"))? {
-                Event::Key(key) => key,
-                _ => continue,
-            };
-
-        if !matches!(modal, ModalState::None) {
-            handle_modal_event(key_event.code, &mut modal, &mut app, &store)?;
-            continue;
-        }
-
-        match key_event.code {
-            KeyCode::Char('q') | KeyCode::Esc => break,
-            KeyCode::Char(']') | KeyCode::Right => {
-                app.select_next_day();
+    let run_result = (|| -> Result<(), String> {
+        loop {
+            let visible_rows = visible_todos(&app);
+            if selected_index >= visible_rows.len() && !visible_rows.is_empty() {
+                selected_index = visible_rows.len().saturating_sub(1);
+            }
+            if visible_rows.is_empty() {
                 selected_index = 0;
             }
-            KeyCode::Char('[') | KeyCode::Left => {
-                app.select_prev_day();
-                selected_index = 0;
-            }
-            KeyCode::Char('}') | KeyCode::Char('L') => {
-                app.select_next_month();
-                selected_index = 0;
-            }
-            KeyCode::Char('{') | KeyCode::Char('H') => {
-                app.select_prev_month();
-                selected_index = 0;
-            }
-            KeyCode::Char('t') => {
-                let now = Local::now().date_naive();
-                app.set_selected_day(now);
-                selected_index = 0;
-            }
-            KeyCode::Char('a') => {
-                modal = ModalState::TaskForm(TaskFormState {
-                    todo_id: None,
-                    title: String::new(),
-                    priority: Priority::Medium,
-                    date: app.selected_day(),
-                    field: TaskFormField::Title,
-                    error: None,
-                });
-            }
-            KeyCode::Char('e') =>
+
+            terminal
+                .draw(|frame| draw_ui(frame, &app, &visible_rows, selected_index, &modal, overlay))
+                .map_err(|error| format!("draw failed: {error}"))?;
+
+            if !event::poll(Duration::from_millis(250))
+                .map_err(|error| format!("event poll failed: {error}"))?
             {
-                #[allow(clippy::collapsible_if)]
-                if let Some(row) = visible_rows.get(selected_index) {
-                    #[allow(clippy::collapsible_if)]
-                    if let Some(todo) = app.todo(row.id) {
+                continue;
+            }
+
+            let key_event =
+                match event::read().map_err(|error| format!("event read failed: {error}"))? {
+                    Event::Key(key) => key,
+                    _ => continue,
+                };
+
+            if !matches!(modal, ModalState::None) {
+                handle_modal_event(key_event.code, &mut modal, &mut app, &store)?;
+                continue;
+            }
+
+            if overlay != Overlay::None {
+                match overlay {
+                    Overlay::Help => match key_event.code {
+                        KeyCode::Char('?') | KeyCode::Esc => overlay = Overlay::None,
+                        KeyCode::Char('q') => overlay = request_quit_overlay(overlay),
+                        _ => {}
+                    },
+                    Overlay::QuitConfirm => match key_event.code {
+                        KeyCode::Char('y') => break,
+                        KeyCode::Char('n') | KeyCode::Esc => overlay = Overlay::None,
+                        _ => {}
+                    },
+                    Overlay::None => {}
+                }
+                continue;
+            }
+
+            match key_event.code {
+                KeyCode::Char('q') => overlay = request_quit_overlay(overlay),
+                KeyCode::Esc => overlay = Overlay::QuitConfirm,
+                KeyCode::Char('?') => overlay = toggle_help_overlay(overlay),
+                KeyCode::Char(']') | KeyCode::Right => {
+                    app.select_next_day();
+                    selected_index = 0;
+                }
+                KeyCode::Char('[') | KeyCode::Left => {
+                    app.select_prev_day();
+                    selected_index = 0;
+                }
+                KeyCode::Char('}') | KeyCode::Char('L') => {
+                    app.select_next_month();
+                    selected_index = 0;
+                }
+                KeyCode::Char('{') | KeyCode::Char('H') => {
+                    app.select_prev_month();
+                    selected_index = 0;
+                }
+                KeyCode::Char('t') => {
+                    let now = Local::now().date_naive();
+                    app.set_selected_day(now);
+                    selected_index = 0;
+                }
+                KeyCode::Char('a') => {
+                    modal = ModalState::TaskForm(TaskFormState {
+                        todo_id: None,
+                        title: String::new(),
+                        priority: Priority::Medium,
+                        date: app.selected_day(),
+                        field: TaskFormField::Title,
+                        error: None,
+                    });
+                }
+                KeyCode::Char('e') => {
+                    if let Some(todo) = visible_rows
+                        .get(selected_index)
+                        .and_then(|row| app.todo(row.id))
+                    {
                         modal = ModalState::TaskForm(TaskFormState {
                             todo_id: Some(todo.id),
                             title: todo.title.clone(),
@@ -170,60 +193,72 @@ fn run_app() -> Result<(), String> {
                         });
                     }
                 }
-            }
-            KeyCode::Char('m') =>
-            {
-                #[allow(clippy::collapsible_if)]
-                if let Some(row) = visible_rows.get(selected_index) {
-                    #[allow(clippy::collapsible_if)]
-                    if let Some(todo) = app.todo(row.id) {
+                KeyCode::Char('m') => {
+                    if let Some(todo) = visible_rows
+                        .get(selected_index)
+                        .and_then(|row| app.todo(row.id))
+                    {
                         modal = ModalState::MoveDate(MoveDateState {
                             todo_id: todo.id,
                             date: todo.assigned_day,
                         });
                     }
                 }
-            }
-            KeyCode::Char('d') => {
-                if let Some(row) = visible_rows.get(selected_index) {
-                    app.delete_todo(row.id)?;
-                    store.save(app.todos())?;
+                KeyCode::Char('d') => {
+                    if let Some(row) = visible_rows.get(selected_index) {
+                        app.delete_todo(row.id)?;
+                        store.save(app.todos())?;
+                    }
                 }
-            }
-            KeyCode::Enter | KeyCode::Char(' ') => {
-                if let Some(row) = visible_rows.get(selected_index) {
-                    app.toggle_done(row.id)?;
-                    store.save(app.todos())?;
+                KeyCode::Enter | KeyCode::Char(' ') => {
+                    if let Some(row) = visible_rows.get(selected_index) {
+                        app.toggle_done(row.id)?;
+                        store.save(app.todos())?;
+                    }
                 }
-            }
-            KeyCode::Char('j') | KeyCode::Down => {
-                if selected_index + 1 < visible_rows.len() {
-                    selected_index += 1;
+                KeyCode::Char('j') | KeyCode::Down => {
+                    if selected_index + 1 < visible_rows.len() {
+                        selected_index += 1;
+                    }
                 }
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                if selected_index > 0 {
-                    selected_index = selected_index.saturating_sub(1);
+                KeyCode::Char('k') | KeyCode::Up => {
+                    if selected_index > 0 {
+                        selected_index = selected_index.saturating_sub(1);
+                    }
                 }
-            }
-            KeyCode::Char(c) => {
-                // Search input: accumulate characters
-                if !c.is_control() {
+                KeyCode::Char(c) => {
+                    if !c.is_control() {
+                        let mut query = app.search_query().to_string();
+                        query.push(c);
+                        app.set_search_query(query);
+                    }
+                }
+                KeyCode::Backspace => {
                     let mut query = app.search_query().to_string();
-                    query.push(c);
+                    query.pop();
                     app.set_search_query(query);
                 }
+                _ => {}
             }
-            KeyCode::Backspace => {
-                // Remove last character from search
-                let mut query = app.search_query().to_string();
-                query.pop();
-                app.set_search_query(query);
-            }
-            _ => {}
         }
-    }
+        Ok(())
+    })();
 
+    let cleanup_result = cleanup_terminal(&mut terminal);
+
+    match (run_result, cleanup_result) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(run_error), Ok(())) => Err(run_error),
+        (Ok(()), Err(cleanup_error)) => Err(cleanup_error),
+        (Err(run_error), Err(cleanup_error)) => Err(format!(
+            "{run_error}; terminal cleanup failed: {cleanup_error}"
+        )),
+    }
+}
+
+fn cleanup_terminal(
+    terminal: &mut Terminal<ratatui::backend::CrosstermBackend<io::Stdout>>,
+) -> Result<(), String> {
     disable_raw_mode().map_err(|error| format!("failed to disable raw mode: {error}"))?;
     terminal
         .backend_mut()
@@ -436,6 +471,7 @@ fn draw_ui(
     visible_rows: &[VisibleTodo],
     selected_index: usize,
     modal: &ModalState,
+    overlay: Overlay,
 ) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
@@ -491,15 +527,13 @@ fn draw_ui(
     let calendar = draw_calendar_widget(app.selected_day());
     let tasks = draw_tasks_widget(layout[2], visible_rows, selected_index);
 
-    let status = Paragraph::new(
-        "[a] add [e] edit [m] move [d] delete [/] search [enter/space] done [[/]] day [{/}] month [t] today [q] quit",
-    )
-    .style(Style::default().fg(COLOR_GHOST).bg(COLOR_VOID))
-    .block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(COLOR_STEEL)),
-    );
+    let status = Paragraph::new(footer_hint(overlay))
+        .style(Style::default().fg(COLOR_GHOST).bg(COLOR_VOID))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(COLOR_STEEL)),
+        );
 
     frame.render_widget(title, layout[0]);
     frame.render_widget(calendar, layout[1]);
@@ -512,6 +546,56 @@ fn draw_ui(
     frame.render_widget(status, layout[3]);
 
     draw_modal(frame, modal);
+    draw_overlay(frame, overlay);
+}
+
+fn draw_overlay(frame: &mut ratatui::Frame<'_>, overlay: Overlay) {
+    match overlay {
+        Overlay::None => {}
+        Overlay::Help => {
+            let area = centered_rect(72, 60, frame.area());
+            frame.render_widget(Clear, area);
+            let text = vec![
+                Line::from("Keyboard bindings"),
+                Line::from(""),
+                Line::from("j/k or arrows  move selection"),
+                Line::from("[/] or arrows   previous/next day"),
+                Line::from("{/} or H/L      previous/next month"),
+                Line::from("a              add task"),
+                Line::from("e              edit selected task"),
+                Line::from("m              move selected task date"),
+                Line::from("d              delete selected task"),
+                Line::from("Enter/Space    toggle done"),
+                Line::from("t              jump to today"),
+                Line::from("type / backspace  filter tasks"),
+                Line::from("q              quit confirmation"),
+                Line::from("? or Esc       close this help"),
+            ];
+            let widget = Paragraph::new(text).block(
+                Block::default()
+                    .title("Help")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(COLOR_CYAN)),
+            );
+            frame.render_widget(widget, area);
+        }
+        Overlay::QuitConfirm => {
+            let area = centered_rect(40, 20, frame.area());
+            frame.render_widget(Clear, area);
+            let widget = Paragraph::new(vec![
+                Line::from("Quit Dayroll?"),
+                Line::from(""),
+                Line::from("[y] yes   [n] no   [Esc] cancel"),
+            ])
+            .block(
+                Block::default()
+                    .title("Confirm Quit")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(COLOR_RED)),
+            );
+            frame.render_widget(widget, area);
+        }
+    }
 }
 
 fn draw_modal(frame: &mut ratatui::Frame<'_>, modal: &ModalState) {

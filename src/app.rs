@@ -10,6 +10,13 @@ pub struct AppState {
     search_query: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Overlay {
+    None,
+    Help,
+    QuitConfirm,
+}
+
 #[derive(Debug, Clone)]
 pub struct DayBuckets {
     pub overdue: Vec<Todo>,
@@ -263,6 +270,30 @@ fn shift_month(day: NaiveDate, delta_months: i32) -> Result<NaiveDate, String> {
 
 pub fn shift_month_date(day: NaiveDate, delta_months: i32) -> Result<NaiveDate, String> {
     shift_month(day, delta_months)
+}
+
+pub fn toggle_help_overlay(current: Overlay) -> Overlay {
+    if current == Overlay::Help {
+        Overlay::None
+    } else {
+        Overlay::Help
+    }
+}
+
+pub fn request_quit_overlay(current: Overlay) -> Overlay {
+    match current {
+        Overlay::None => Overlay::QuitConfirm,
+        Overlay::Help => Overlay::None,
+        Overlay::QuitConfirm => Overlay::QuitConfirm,
+    }
+}
+
+pub fn footer_hint(overlay: Overlay) -> &'static str {
+    match overlay {
+        Overlay::None => "[?] help [q] quit [j/k] move [enter] done",
+        Overlay::Help => "[Esc/?] close help",
+        Overlay::QuitConfirm => "[y] quit [n/Esc] cancel",
+    }
 }
 
 fn days_in_month(year: i32, month: u32) -> Result<u32, String> {
