@@ -24,18 +24,22 @@ Dayroll helps you manage tasks by organizing them into **overdue** and **today**
 | `j` / `Down` | Move selection down |
 | `k` / `Up` | Move selection up |
 | `Left` / `Right` | Move between days |
-| `Left` / `Right` (in month view) | Move between months |
+| `{` / `}` or `H` / `L` | Move between months |
+| `t` | Jump to today |
 
 ### Task Management
 | Key | Action |
 |-----|--------|
-| `q` | Quit |
-| `t` | Jump to today |
 | `a` | Add new task |
 | `e` | Edit task (title, priority, date) |
 | `m` | Move task to different date |
 | `d` | Delete task |
 | `Enter` / `Space` | Toggle task completion |
+| `u` | Undo last move/delete/toggle |
+| `/` | Enter search mode |
+| `Esc` (in search) | Clear/exit search |
+| `?` | Open/close help |
+| `q` | Quit (with confirmation) |
 
 ## Buckets
 
@@ -58,10 +62,15 @@ Dayroll helps you manage tasks by organizing them into **overdue** and **today**
 
 ### Adding a Task
 1. Press `a` to open the add task dialog
-2. Enter the task title and press Enter
-3. Set priority (↑/↓ to cycle) and press Enter
-4. Set assigned date (default is today)
-5. Press Enter to save
+2. Enter title in the `Title` field
+3. Use `Tab` / `Shift+Tab` to switch fields
+4. Use `←/→` to change priority and date picker keys for date
+5. Press `Enter` to save
+
+Quick-add tokens (in the title field):
+- `!high` / `!medium` / `!low`
+- `@today` / `@tomorrow` / `@YYYY-MM-DD`
+- Example: `pay rent @tomorrow !high`
 
 ### Editing a Task
 1. Select a task and press `e`
@@ -75,7 +84,7 @@ Dayroll helps you manage tasks by organizing them into **overdue** and **today**
 
 ### Deleting a Task
 1. Select a task and press `d`
-2. Confirm deletion
+2. Press `u` to undo if needed
 
 ## Storage
 
@@ -109,7 +118,7 @@ Tasks are stored in `~/.dayroll/todos.json`
 ### In Progress
 - [x] Fix Clippy warnings
 - [x] Add README documentation
-- [ ] Search/filter for tasks
+- [x] Search mode for tasks
 - [ ] Dark mode / theme customization
 
 ### Planned
