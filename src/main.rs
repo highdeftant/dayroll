@@ -164,7 +164,6 @@ fn run_app() -> Result<(), String> {
                     }
                 }
                 KeyCode::Char('?') => overlay = toggle_help_overlay(overlay),
-                KeyCode::Char('/') => app.activate_search(),
                 KeyCode::Char(']') | KeyCode::Right => {
                     app.select_next_day();
                     selected_index = 0;
@@ -248,16 +247,6 @@ fn run_app() -> Result<(), String> {
                 KeyCode::Char('k') | KeyCode::Up => {
                     if selected_index > 0 {
                         selected_index = selected_index.saturating_sub(1);
-                    }
-                }
-                KeyCode::Char(c) => {
-                    if app.search_active() && !c.is_control() {
-                        app.append_search_char(c);
-                    }
-                }
-                KeyCode::Backspace => {
-                    if app.search_active() {
-                        app.pop_search_char();
                     }
                 }
                 _ => {}

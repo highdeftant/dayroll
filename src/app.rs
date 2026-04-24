@@ -107,8 +107,7 @@ impl AppState {
     }
 
     pub fn cancel_search(&mut self) {
-        self.search_query.clear();
-        self.search_active = false;
+        self.clear_search();
     }
 
     pub fn add_todo(
