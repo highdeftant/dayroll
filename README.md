@@ -135,6 +135,7 @@ Tasks are stored in `~/.dayroll/todos.json`
 - [ ] Command palette
 - [ ] Plugin system
 - [ ] Calendar integrations (low priority): Google Calendar API + iCloud CalDAV (phased: import -> export -> two-way sync)
+- [ ] Dedicated overdue-rollover widget (evaluate layout: beside task list vs beside calendar panel)
 
 ## Building from Source
 

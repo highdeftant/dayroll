@@ -22,9 +22,12 @@
    - Remove noisy scaffolding that no longer buys anything.
 
 5. UI polish
-   - Add a clear-search key.
-   - Improve empty-state hints.
-   - Tighten form ergonomics and field hints.
+- Add a clear-search key.
+- Improve empty-state hints.
+- Tighten form ergonomics and field hints.
+- Add a dedicated overdue-rollover widget and evaluate placement:
+  - beside task list, or
+  - beside calendar panel.
 
 ## Notes
 
