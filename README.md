@@ -132,9 +132,9 @@ Tasks are stored in `~/.dayroll/todos.json`
 ### Future Considerations
 - [ ] Keyboard macros
 - [ ] Task templates
-- [ ] Multiple calendars
 - [ ] Command palette
 - [ ] Plugin system
+- [ ] Calendar integrations (low priority): Google Calendar API + iCloud CalDAV (phased: import -> export -> two-way sync)
 
 ## Building from Source
 
