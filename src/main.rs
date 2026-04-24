@@ -9,8 +9,8 @@ use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use dayroll::app::{
-    AppState, DayBuckets, Overlay, UndoAction, footer_hint, month_grid, request_quit_overlay,
-    shift_month_date, toggle_help_overlay, viewport_window,
+    AppState, DayBuckets, Overlay, UndoAction, footer_hint, month_grid, parse_quick_add,
+    request_quit_overlay, shift_month_date, toggle_help_overlay, viewport_window,
 };
 use dayroll::model::{Priority, Status};
 use dayroll::storage::{Store, TodoStore};
@@ -370,7 +370,8 @@ fn handle_modal_event(
                     if let Some(id) = form.todo_id {
                         app.update_todo(id, title, form.priority, form.date)?;
                     } else {
-                        app.add_todo(title, form.priority, form.date);
+                        let parsed = parse_quick_add(&title, form.priority, form.date)?;
+                        app.add_todo(parsed.title, parsed.priority, parsed.assigned_day);
                     }
 
                     *pending_undo = None;
@@ -716,6 +717,7 @@ fn draw_modal(frame: &mut ratatui::Frame<'_>, modal: &ModalState) {
                 )),
                 Line::from(""),
                 Line::from("Tab/Shift+Tab switch field"),
+                Line::from("Quick add: @tomorrow @2026-05-01 !high"),
                 Line::from("Enter save, Esc cancel"),
             ];
 

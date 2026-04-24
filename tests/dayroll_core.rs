@@ -270,3 +270,33 @@ fn undo_restore_after_toggle_returns_previous_status() -> Result<(), String> {
     assert_eq!(todo.status, dayroll::model::Status::Pending);
     Ok(())
 }
+
+#[test]
+fn quick_add_parses_priority_and_relative_day_tokens() -> Result<(), String> {
+    let default_day = date(2026, 4, 18)?;
+    let parsed =
+        dayroll::app::parse_quick_add("pay rent @tomorrow !high", Priority::Low, default_day)?;
+    assert_eq!(parsed.title, "pay rent");
+    assert_eq!(parsed.priority, Priority::High);
+    assert_eq!(parsed.assigned_day, date(2026, 4, 19)?);
+    Ok(())
+}
+
+#[test]
+fn quick_add_parses_iso_date_token() -> Result<(), String> {
+    let default_day = date(2026, 4, 18)?;
+    let parsed =
+        dayroll::app::parse_quick_add("oil change @2026-05-01", Priority::Medium, default_day)?;
+    assert_eq!(parsed.title, "oil change");
+    assert_eq!(parsed.priority, Priority::Medium);
+    assert_eq!(parsed.assigned_day, date(2026, 5, 1)?);
+    Ok(())
+}
+
+#[test]
+fn quick_add_rejects_bad_date_token() -> Result<(), String> {
+    let default_day = date(2026, 4, 18)?;
+    let err = dayroll::app::parse_quick_add("pay bill @2026-99-99", Priority::Medium, default_day);
+    assert!(err.is_err());
+    Ok(())
+}
