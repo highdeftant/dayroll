@@ -158,7 +158,7 @@ fn run_app() -> Result<(), String> {
                 KeyCode::Char('q') => overlay = request_quit_overlay(overlay),
                 KeyCode::Esc => {
                     if app.search_active() {
-                        app.clear_search();
+                        app.cancel_search();
                     } else {
                         overlay = Overlay::QuitConfirm;
                     }
@@ -575,7 +575,8 @@ fn draw_ui(
         app.search_query(),
     );
 
-    let status = Paragraph::new(footer_hint(overlay, app.search_active()))
+    let status_hint = footer_hint(overlay, app.search_active(), app.search_query());
+    let status = Paragraph::new(status_hint.0)
         .style(Style::default().fg(COLOR_GHOST).bg(COLOR_VOID))
         .block(
             Block::default()

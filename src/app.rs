@@ -106,6 +106,11 @@ impl AppState {
         self.search_active = !self.search_query.is_empty();
     }
 
+    pub fn cancel_search(&mut self) {
+        self.search_query.clear();
+        self.search_active = false;
+    }
+
     pub fn add_todo(
         &mut self,
         title: impl Into<String>,
@@ -408,17 +413,25 @@ pub fn request_quit_overlay(current: Overlay) -> Overlay {
     }
 }
 
-pub fn footer_hint(overlay: Overlay, search_active: bool) -> &'static str {
+pub fn footer_hint(overlay: Overlay, search_active: bool, search_query: &str) -> (String, bool) {
     match overlay {
         Overlay::None => {
             if search_active {
-                "[search] type to filter [Backspace] delete [Esc] clear"
+                let query_display = if search_query.is_empty() {
+                    "[search: __] [Esc] clear".to_string()
+                } else {
+                    format!("[search: {search_query}_] [Esc] clear")
+                };
+                (query_display, true)
             } else {
-                "[?] help [/] search [u] undo [q] quit [j/k] move [enter] done"
+                (
+                    "[?] help [/] search [u] undo [q] quit [j/k] move [enter] done".to_string(),
+                    false,
+                )
             }
         }
-        Overlay::Help => "[Esc/?] close help",
-        Overlay::QuitConfirm => "[y] quit [n/Esc] cancel",
+        Overlay::Help => ("[Esc/?] close help".to_string(), false),
+        Overlay::QuitConfirm => ("[y] quit [n/Esc] cancel".to_string(), false),
     }
 }
 

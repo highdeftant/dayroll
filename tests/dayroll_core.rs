@@ -172,9 +172,9 @@ fn quit_request_opens_confirmation_from_normal_mode() {
 
 #[test]
 fn footer_hint_is_short_in_normal_mode() {
-    let hint = dayroll::app::footer_hint(dayroll::app::Overlay::None, false);
-    assert!(hint.contains("[?] help"));
-    assert!(!hint.contains("delete"));
+    let hint = dayroll::app::footer_hint(dayroll::app::Overlay::None, false, "");
+    assert!(hint.0.contains("[?] help"));
+    assert!(!hint.0.contains("delete"));
 }
 
 #[test]
@@ -198,9 +198,9 @@ fn search_mode_starts_inactive_and_can_be_cleared() -> Result<(), String> {
 
 #[test]
 fn active_search_footer_hint_explains_escape() {
-    let hint = dayroll::app::footer_hint(dayroll::app::Overlay::None, true);
-    assert!(hint.contains("search"));
-    assert!(hint.contains("Esc"));
+    let hint = dayroll::app::footer_hint(dayroll::app::Overlay::None, true, "test");
+    assert!(hint.0.contains("search"));
+    assert!(hint.0.contains("Esc"));
 }
 
 #[test]
