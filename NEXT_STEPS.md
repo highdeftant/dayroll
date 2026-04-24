@@ -2,22 +2,23 @@
 
 ## Priority Order
 
-1. Search/filter behavior
+1. Search/filter behavior [done]
    - Decide whether search is a real first-class mode with explicit entry/exit.
    - Otherwise remove the implicit type-anywhere filtering behavior.
 
-2. Documentation sync
+2. Documentation sync [done]
    - Update README keybindings.
    - Update add/edit/move/delete flow.
    - Update storage format section.
    - Update search behavior notes.
 
-3. Core test coverage
+3. Core test coverage [mostly done]
    - Add tests for add, edit, move, toggle complete, and delete.
    - Add save/load roundtrip coverage.
    - Add month-shift edge cases.
+   - Remaining: evaluate whether explicit undo-depth behavior should be extracted into a testable helper.
 
-4. Cleanup
+4. Cleanup [next]
    - Remove thin compatibility wrappers.
    - Remove noisy scaffolding that no longer buys anything.
 

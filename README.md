@@ -23,7 +23,7 @@ Dayroll helps you manage tasks by organizing them into **overdue** and **today**
 |-----|--------|
 | `j` / `Down` | Move selection down |
 | `k` / `Up` | Move selection up |
-| `Left` / `Right` | Move between days |
+| `Left` / `Right` or `[` / `]` | Move between days |
 | `{` / `}` or `H` / `L` | Move between months |
 | `t` | Jump to today |
 
@@ -40,6 +40,12 @@ Dayroll helps you manage tasks by organizing them into **overdue** and **today**
 | `Esc` (in search) | Clear/exit search |
 | `?` | Open/close help |
 | `q` | Quit (with confirmation) |
+
+### Search Behavior
+- Press `/` to enter explicit search mode.
+- Footer shows live search state: `[search: __] [Esc] clear` and current query as you type.
+- While search mode is active, typed command letters are treated as search input (not task actions).
+- Press `Esc` to clear the query and exit search mode.
 
 ## Buckets
 
@@ -141,7 +147,7 @@ Tasks are stored in `~/.dayroll/todos.json`
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/dayroll.git
+git clone https://github.com/highdeftant/dayroll.git
 cd dayroll
 
 # Build
