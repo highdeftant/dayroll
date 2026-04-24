@@ -1,6 +1,6 @@
 use chrono::NaiveDate;
 
-use dayroll::app::{AppState, DayBuckets};
+use dayroll::app::{AppState, DayBuckets, UndoSlot};
 use dayroll::model::{Priority, Todo};
 
 fn date(year: i32, month: u32, day: u32) -> Result<NaiveDate, String> {
@@ -292,6 +292,46 @@ fn undo_restore_after_toggle_returns_previous_status() -> Result<(), String> {
         .ok_or_else(|| "missing restored todo".to_string())?;
     assert!(todo.completed_at.is_none());
     assert_eq!(todo.status, dayroll::model::Status::Pending);
+    Ok(())
+}
+
+#[test]
+fn undo_slot_holds_only_latest_action() -> Result<(), String> {
+    let day = date(2026, 4, 18)?;
+    let mut state = AppState::new_for_date(day);
+    let first_id = state.add_todo("first", Priority::Low, day);
+    let second_id = state.add_todo("second", Priority::Medium, day);
+
+    let first_undo = state.delete_todo_with_undo(first_id)?;
+    let second_undo = state.delete_todo_with_undo(second_id)?;
+
+    let mut slot = UndoSlot::new();
+    slot.record(first_undo);
+    slot.record(second_undo);
+
+    state.apply_undo(
+        slot.take()
+            .ok_or_else(|| "expected pending undo action".to_string())?,
+    )?;
+
+    assert!(state.todo(second_id).is_some());
+    assert!(state.todo(first_id).is_none());
+    assert!(slot.take().is_none());
+    Ok(())
+}
+
+#[test]
+fn undo_slot_clear_drops_pending_action() -> Result<(), String> {
+    let day = date(2026, 4, 18)?;
+    let mut state = AppState::new_for_date(day);
+    let id = state.add_todo("to delete", Priority::High, day);
+
+    let mut slot = UndoSlot::new();
+    slot.record(state.delete_todo_with_undo(id)?);
+    slot.clear();
+
+    assert!(slot.take().is_none());
+    assert!(state.todo(id).is_none());
     Ok(())
 }
 

@@ -12,13 +12,13 @@
    - Update storage format section.
    - Update search behavior notes.
 
-3. Core test coverage [mostly done]
+3. Core test coverage [done]
    - Add tests for add, edit, move, toggle complete, and delete.
    - Add save/load roundtrip coverage.
    - Add month-shift edge cases.
-   - Remaining: evaluate whether explicit undo-depth behavior should be extracted into a testable helper.
+   - Added explicit single-step undo helper (`UndoSlot`) with coverage for replacement/clear semantics.
 
-4. Cleanup [next]
+4. Cleanup [in progress]
    - Remove thin compatibility wrappers.
    - Remove noisy scaffolding that no longer buys anything.
 

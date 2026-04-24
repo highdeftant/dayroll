@@ -9,7 +9,7 @@ use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use dayroll::app::{
-    AppState, DayBuckets, Overlay, UndoAction, footer_hint, month_grid, parse_quick_add,
+    AppState, DayBuckets, Overlay, UndoSlot, footer_hint, month_grid, parse_quick_add,
     request_quit_overlay, shift_month_date, toggle_help_overlay, viewport_window,
 };
 use dayroll::model::{Priority, Status};
@@ -85,7 +85,7 @@ fn run_app() -> Result<(), String> {
     let mut selected_index = 0usize;
     let mut modal = ModalState::None;
     let mut overlay = Overlay::None;
-    let mut pending_undo: Option<UndoAction> = None;
+    let mut undo_slot = UndoSlot::new();
 
     enable_raw_mode().map_err(|error| format!("failed to enable raw mode: {error}"))?;
     let mut stdout = io::stdout();
@@ -123,13 +123,7 @@ fn run_app() -> Result<(), String> {
                 };
 
             if !matches!(modal, ModalState::None) {
-                handle_modal_event(
-                    key_event.code,
-                    &mut modal,
-                    &mut app,
-                    &store,
-                    &mut pending_undo,
-                )?;
+                handle_modal_event(key_event.code, &mut modal, &mut app, &store, &mut undo_slot)?;
                 continue;
             }
 
@@ -222,20 +216,20 @@ fn run_app() -> Result<(), String> {
                     }
                 }
                 KeyCode::Char('u') => {
-                    if let Some(undo) = pending_undo.take() {
+                    if let Some(undo) = undo_slot.take() {
                         app.apply_undo(undo)?;
                         store.save(app.todos())?;
                     }
                 }
                 KeyCode::Char('d') => {
                     if let Some(row) = visible_rows.get(selected_index) {
-                        pending_undo = Some(app.delete_todo_with_undo(row.id)?);
+                        undo_slot.record(app.delete_todo_with_undo(row.id)?);
                         store.save(app.todos())?;
                     }
                 }
                 KeyCode::Enter | KeyCode::Char(' ') => {
                     if let Some(row) = visible_rows.get(selected_index) {
-                        pending_undo = Some(app.toggle_done_with_undo(row.id)?);
+                        undo_slot.record(app.toggle_done_with_undo(row.id)?);
                         store.save(app.todos())?;
                     }
                 }
@@ -308,7 +302,7 @@ fn handle_modal_event(
     modal: &mut ModalState,
     app: &mut AppState,
     store: &Store,
-    pending_undo: &mut Option<UndoAction>,
+    undo_slot: &mut UndoSlot,
 ) -> Result<(), String> {
     match modal {
         ModalState::None => Ok(()),
@@ -316,7 +310,7 @@ fn handle_modal_event(
             match key {
                 KeyCode::Esc => *modal = ModalState::None,
                 KeyCode::Enter => {
-                    *pending_undo = Some(app.move_todo_with_undo(state.todo_id, state.date)?);
+                    undo_slot.record(app.move_todo_with_undo(state.todo_id, state.date)?);
                     store.save(app.todos())?;
                     *modal = ModalState::None;
                 }
@@ -363,7 +357,7 @@ fn handle_modal_event(
                         app.add_todo(parsed.title, parsed.priority, parsed.assigned_day);
                     }
 
-                    *pending_undo = None;
+                    undo_slot.clear();
                     store.save(app.todos())?;
                     *modal = ModalState::None;
                 }

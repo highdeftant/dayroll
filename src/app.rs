@@ -41,6 +41,29 @@ pub enum UndoAction {
     },
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct UndoSlot {
+    pending: Option<UndoAction>,
+}
+
+impl UndoSlot {
+    pub fn new() -> Self {
+        Self { pending: None }
+    }
+
+    pub fn record(&mut self, action: UndoAction) {
+        self.pending = Some(action);
+    }
+
+    pub fn clear(&mut self) {
+        self.pending = None;
+    }
+
+    pub fn take(&mut self) -> Option<UndoAction> {
+        self.pending.take()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct QuickAddParsed {
     pub title: String,
