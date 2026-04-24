@@ -156,6 +156,30 @@ fn shift_month_date_clamps() -> Result<(), String> {
 }
 
 #[test]
+fn shift_month_date_handles_leap_year_february() -> Result<(), String> {
+    let jan_31 = date(2024, 1, 31)?;
+    let feb = dayroll::app::shift_month_date(jan_31, 1)?;
+    assert_eq!(feb, date(2024, 2, 29)?);
+    Ok(())
+}
+
+#[test]
+fn shift_month_date_rolls_over_year_forward() -> Result<(), String> {
+    let dec_31 = date(2025, 12, 31)?;
+    let jan = dayroll::app::shift_month_date(dec_31, 1)?;
+    assert_eq!(jan, date(2026, 1, 31)?);
+    Ok(())
+}
+
+#[test]
+fn shift_month_date_rolls_over_year_backward() -> Result<(), String> {
+    let jan_31 = date(2026, 1, 31)?;
+    let dec = dayroll::app::shift_month_date(jan_31, -1)?;
+    assert_eq!(dec, date(2025, 12, 31)?);
+    Ok(())
+}
+
+#[test]
 fn help_overlay_toggles_on_and_off() {
     let shown = dayroll::app::toggle_help_overlay(dayroll::app::Overlay::None);
     assert_eq!(shown, dayroll::app::Overlay::Help);
