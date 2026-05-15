@@ -1,10 +1,15 @@
 # Dayroll
 
-A terminal-based task manager with a day-first calendar interface for organizing daily tasks.
+A terminal-based task manager with a day-first workflow and nested task/calendar layout.
 
 ## Overview
 
-Dayroll helps you manage tasks by organizing them into **overdue** and **today** buckets. Tasks can be assigned to any date, making it easy to see what needs attention and plan ahead.
+Dayroll organizes work into a main **Tasks** panel, an **Overdue** subpanel, and a nested **Calendar** panel. Tasks can be assigned to any date, making it easy to see what needs attention and plan ahead.
+
+Current layout:
+- Top header: day, pending count, done count, clock
+- Main widget: Tasks + Overdue + Calendar
+- Bottom-left of main widget: search filter state chip (`FILTER idle|armed|active`)
 
 ## Workflow
 
@@ -47,22 +52,31 @@ Dayroll helps you manage tasks by organizing them into **overdue** and **today**
 - While search mode is active, typed command letters are treated as search input (not task actions).
 - Press `Esc` to clear the query and exit search mode.
 
-## Buckets
+## Panels
 
-### Overdue Tasks
-- All incomplete tasks assigned to past dates
-- Displayed at the top for immediate attention
-- Sorted by assigned date (oldest first)
+### Tasks
+- Active list for non-overdue items on/around the selected day view
+- Header includes right-aligned counters: `todo`, `done`, `overdue`
+- Rows use selection marker + status dot + priority chip
 
-### Today's Tasks
-- All incomplete tasks assigned to today
-- Displayed below overdue tasks
-- Sorted by priority (high → medium → low)
+### Overdue
+- Incomplete tasks from past dates
+- Rendered in its own subpanel beneath Tasks
+- Intended to keep stale work visible without dominating the main queue
+
+### Calendar
+- Nested inside the same main widget as Tasks/Overdue
+- Uses responsive split: side-by-side on wide terminals, stacked on narrow terminals
 
 ### Priority System
-- **High**: Displayed with `!` prefix (red)
-- **Medium**: No prefix (default)
-- **Low**: Displayed with `-` prefix (dim)
+- **High**: `P1` chip
+- **Medium**: `P2` chip
+- **Low**: `P3` chip
+
+### Status Markers
+- `●` orange = todo (pending)
+- `●` green = done
+- `●` red = overdue
 
 ## Task Operations
 
