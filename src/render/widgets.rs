@@ -31,6 +31,7 @@ pub(super) struct NestedTasksWidget<'a> {
 pub(super) fn build_nested_tasks_widget(
     area: Rect,
     selected_day: NaiveDate,
+    now_time: &str,
     visible_rows: &[VisibleTodo],
     selected_index: usize,
     search_active: bool,
@@ -68,6 +69,20 @@ pub(super) fn build_nested_tasks_widget(
                 .add_modifier(Modifier::BOLD)
                 .add_modifier(Modifier::ITALIC),
         )]))
+        .title_top(
+            Line::from(Span::styled(
+                format!(" {} ", selected_day),
+                Style::default().fg(C_INFO),
+            ))
+            .centered(),
+        )
+        .title_top(
+            Line::from(Span::styled(
+                format!(" {} ", now_time),
+                Style::default().fg(C_INFO).add_modifier(Modifier::DIM),
+            ))
+            .right_aligned(),
+        )
         .title_bottom(Line::from(Span::styled(search_chip.0, search_chip.1)))
         .borders(Borders::ALL)
         .border_style(border_style());

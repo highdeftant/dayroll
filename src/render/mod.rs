@@ -1,6 +1,5 @@
-use chrono::Local;
 use dayroll::app::{AppState, DayBuckets, Overlay, footer_hint};
-use dayroll::model::{Priority, Status};
+use dayroll::model::Priority;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -86,52 +85,13 @@ pub(crate) fn draw_ui(
 
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(14),
-            Constraint::Length(3),
-        ])
+        .constraints([Constraint::Min(14), Constraint::Length(3)])
         .split(frame.area());
 
-    let pending = app
-        .todos()
-        .iter()
-        .filter(|todo| todo.status == Status::Pending)
-        .count();
-    let done = app
-        .todos()
-        .iter()
-        .filter(|todo| todo.status == Status::Done)
-        .count();
-
-    let title = Paragraph::new(Line::from(vec![
-        Span::styled(
-            format!(" day:{} ", app.selected_day()),
-            chip_style(C_TEXT, Color::Rgb(58, 70, 84)),
-        ),
-        Span::styled(
-            format!(" pending:{} ", pending),
-            chip_style(C_TEXT, Color::Rgb(104, 71, 31)),
-        ),
-        Span::styled(
-            format!(" done:{} ", done),
-            chip_style(C_OK, Color::Rgb(43, 84, 61)),
-        ),
-        Span::styled(
-            format!(" {} ", Local::now().format("%H:%M:%S")),
-            bar_style().fg(C_INFO).add_modifier(Modifier::DIM),
-        ),
-    ]))
-    .style(bar_style())
-    .block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(border_style()),
-    );
-
     let tasks = widgets::build_nested_tasks_widget(
-        layout[1],
+        layout[0],
         app.selected_day(),
+        &chrono::Local::now().format("%H:%M:%S").to_string(),
         visible_rows,
         selected_index,
         app.search_active(),
@@ -154,8 +114,7 @@ pub(crate) fn draw_ui(
             .border_style(border_style()),
     );
 
-    frame.render_widget(title, layout[0]);
-    frame.render_widget(tasks.outer, layout[1]);
+    frame.render_widget(tasks.outer, layout[0]);
     frame.render_widget(tasks.today, tasks.today_area);
     frame.render_widget(tasks.overdue, tasks.overdue_area);
     frame.render_widget(tasks.calendar, tasks.calendar_area);
@@ -165,7 +124,7 @@ pub(crate) fn draw_ui(
     if let Some((scrollbar, mut state, area)) = tasks.overdue_scrollbar {
         frame.render_stateful_widget(scrollbar, area, &mut state);
     }
-    frame.render_widget(status, layout[2]);
+    frame.render_widget(status, layout[1]);
 
     panels::draw_modal(frame, modal);
     panels::draw_overlay(frame, overlay);

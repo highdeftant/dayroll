@@ -6,9 +6,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::ui_state::{ModalState, TaskFormField};
 
-use super::{
-    C_ACCENT, C_BG, C_DANGER, C_INFO, C_MUTED, C_PANEL, C_TEXT, C_WARN, border_style, chip_style,
-};
+use super::{C_ACCENT, C_BG, C_DANGER, C_INFO, C_PANEL, C_TEXT, C_WARN, border_style, chip_style};
 
 pub(super) fn draw_overlay(frame: &mut ratatui::Frame<'_>, overlay: Overlay) {
     match overlay {
@@ -18,10 +16,7 @@ pub(super) fn draw_overlay(frame: &mut ratatui::Frame<'_>, overlay: Overlay) {
             let area = centered_rect(68, 60, frame.area());
             frame.render_widget(Clear, area);
             let text = vec![
-                Line::from(Span::styled(
-                    "Keyboard",
-                    Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD),
-                )),
+                help_header_line(),
                 Line::from(""),
                 help_line("j/k or arrows", "move selection"),
                 help_line("[/] or arrows", "previous / next day"),
@@ -194,10 +189,25 @@ fn render_scrim(frame: &mut ratatui::Frame<'_>) {
 fn help_line(key: &str, label: &str) -> Line<'static> {
     Line::from(vec![
         Span::styled(
-            format!(" {:<14} ", key),
+            format!(" {:<18} ", key),
             chip_style(C_TEXT, Color::Rgb(61, 73, 88)),
         ),
-        Span::styled(label.to_string(), Style::default().fg(C_MUTED)),
+        Span::raw("  "),
+        Span::styled(label.to_string(), Style::default().fg(C_TEXT)),
+    ])
+}
+
+fn help_header_line() -> Line<'static> {
+    Line::from(vec![
+        Span::styled(
+            format!(" {:<18} ", "Keyboard"),
+            chip_style(C_TEXT, Color::Rgb(80, 94, 112)),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            "Info",
+            Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD),
+        ),
     ])
 }
 
