@@ -13,7 +13,7 @@ use crate::ui_state::VisibleTodo;
 
 use super::{
     C_ACCENT, C_DANGER, C_INFO, C_MUTED, C_OK, C_PANEL, C_TEXT, C_WARN, bar_style, border_style,
-    chip_style, priority_chip,
+    priority_chip,
 };
 
 pub(super) struct NestedTasksWidget<'a> {
@@ -43,25 +43,13 @@ pub(super) fn build_nested_tasks_widget(
         .count();
     let pending = visible_rows.len().saturating_sub(done);
 
-    let filter_chip = if search_active {
-        if search_query.is_empty() {
-            (" FILTER armed ", chip_style(C_WARN, C_PANEL))
-        } else {
-            (" FILTER active ", chip_style(C_INFO, C_PANEL))
-        }
-    } else {
-        (" FILTER idle ", chip_style(C_MUTED, C_PANEL))
-    };
-
     let outer = Block::default()
-        .title(Line::from(vec![
-            Span::styled(" TASKS ", bar_style().add_modifier(Modifier::BOLD)),
-            Span::styled(filter_chip.0, filter_chip.1),
-            Span::styled(
-                format!(" todo:{} done:{} overdue:{} ", pending, done, overdue_count),
-                Style::default().fg(C_INFO),
-            ),
-        ]))
+        .title(Line::from(vec![Span::styled(
+            " DAYROLL ",
+            bar_style()
+                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::ITALIC),
+        )]))
         .borders(Borders::ALL)
         .border_style(border_style());
 
@@ -104,23 +92,34 @@ pub(super) fn build_nested_tasks_widget(
         .filter(|(_, row)| row.overdue)
         .collect();
 
+    let empty_message = if search_active {
+        if search_query.is_empty() {
+            "search active: type to filter"
+        } else {
+            "no matching tasks"
+        }
+    } else {
+        "no tasks"
+    };
+
     let (today, today_scrollbar) = draw_section_panel(
         today_area,
-        " New Tasks ",
+        " Tasks ",
         &today_rows,
         selected_index,
-        search_active,
-        search_query,
-        "no new tasks",
+        empty_message,
+        Some(format!(
+            " todo:{} done:{} overdue:{} ",
+            pending, done, overdue_count
+        )),
     );
     let (overdue, overdue_scrollbar) = draw_section_panel(
         overdue_area,
         " Overdue ",
         &overdue_rows,
         selected_index,
-        search_active,
-        search_query,
-        "no overdue tasks",
+        empty_message,
+        None,
     );
 
     let calendar = draw_calendar_panel(selected_day);
@@ -143,9 +142,8 @@ fn draw_section_panel(
     title: &'static str,
     rows: &[(usize, &VisibleTodo)],
     selected_index: usize,
-    search_active: bool,
-    search_query: &str,
-    empty_label: &'static str,
+    empty_message: &str,
+    metrics: Option<String>,
 ) -> (
     Paragraph<'static>,
     Option<(Scrollbar<'static>, ScrollbarState, Rect)>,
@@ -159,16 +157,10 @@ fn draw_section_panel(
 
     let mut lines = Vec::<Line<'static>>::new();
     if rows.is_empty() {
-        let msg = if search_active {
-            if search_query.is_empty() {
-                "search active: type to filter"
-            } else {
-                "no matching tasks"
-            }
-        } else {
-            empty_label
-        };
-        lines.push(Line::from(Span::styled(msg, Style::default().fg(C_MUTED))));
+        lines.push(Line::from(Span::styled(
+            empty_message.to_string(),
+            Style::default().fg(C_MUTED),
+        )));
     } else {
         for (global_idx, row) in rows.iter().take(end).skip(start) {
             let selected = *global_idx == selected_index;
@@ -213,6 +205,17 @@ fn draw_section_panel(
         .block(
             Block::default()
                 .title(title)
+                .title_top(
+                    metrics
+                        .map(|value| {
+                            Line::from(Span::styled(
+                                value,
+                                Style::default().fg(C_INFO).add_modifier(Modifier::DIM),
+                            ))
+                            .right_aligned()
+                        })
+                        .unwrap_or_else(|| Line::from("")),
+                )
                 .borders(Borders::ALL)
                 .border_style(border_style()),
         );
