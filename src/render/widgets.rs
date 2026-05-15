@@ -12,7 +12,7 @@ use crate::markdown::render_markdown;
 use crate::ui_state::VisibleTodo;
 
 use super::{
-    C_ACCENT, C_DANGER, C_INFO, C_MUTED, C_OK, C_PANEL, C_TEXT, C_WARN, bar_style, border_style,
+    C_ACCENT, C_DANGER, C_INFO, C_MUTED, C_OK, C_PANEL, C_TEXT, C_WARN, border_style, chip_style,
     priority_chip,
 };
 
@@ -43,13 +43,25 @@ pub(super) fn build_nested_tasks_widget(
         .count();
     let pending = visible_rows.len().saturating_sub(done);
 
+    let search_chip = if !search_active {
+        (
+            " FILTER idle ",
+            chip_style(C_MUTED, ratatui::style::Color::Rgb(55, 66, 78)),
+        )
+    } else if search_query.is_empty() {
+        (
+            " FILTER armed ",
+            chip_style(C_WARN, ratatui::style::Color::Rgb(101, 68, 31)),
+        )
+    } else {
+        (
+            " FILTER active ",
+            chip_style(C_TEXT, ratatui::style::Color::Rgb(55, 80, 109)),
+        )
+    };
+
     let outer = Block::default()
-        .title(Line::from(vec![Span::styled(
-            " DAYROLL ",
-            bar_style()
-                .add_modifier(Modifier::BOLD)
-                .add_modifier(Modifier::ITALIC),
-        )]))
+        .title_bottom(Line::from(Span::styled(search_chip.0, search_chip.1)))
         .borders(Borders::ALL)
         .border_style(border_style());
 

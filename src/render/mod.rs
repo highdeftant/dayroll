@@ -104,23 +104,7 @@ pub(crate) fn draw_ui(
         .filter(|todo| todo.status == Status::Done)
         .count();
 
-    let search_chip = if !app.search_active() {
-        (" FILTER idle ", chip_style(C_MUTED, Color::Rgb(55, 66, 78)))
-    } else if app.search_query().is_empty() {
-        (
-            " FILTER armed ",
-            chip_style(C_WARN, Color::Rgb(101, 68, 31)),
-        )
-    } else {
-        (
-            " FILTER active ",
-            chip_style(C_TEXT, Color::Rgb(55, 80, 109)),
-        )
-    };
-
     let title = Paragraph::new(Line::from(vec![
-        Span::styled(" DAYROLL ", bar_style().add_modifier(Modifier::BOLD)),
-        Span::styled(search_chip.0, search_chip.1),
         Span::styled(
             format!(" day:{} ", app.selected_day()),
             chip_style(C_TEXT, Color::Rgb(58, 70, 84)),
