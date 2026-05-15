@@ -139,7 +139,20 @@ impl AppState {
         priority: Priority,
         assigned_day: NaiveDate,
     ) -> Uuid {
-        let todo = Todo::new(title, priority, assigned_day);
+        self.add_todo_with_description(title, priority, assigned_day, None)
+    }
+
+    pub fn add_todo_with_description(
+        &mut self,
+        title: impl Into<String>,
+        priority: Priority,
+        assigned_day: NaiveDate,
+        description: Option<String>,
+    ) -> Uuid {
+        let mut todo = Todo::new(title, priority, assigned_day);
+        if let Some(description_text) = description {
+            todo = todo.with_description(description_text);
+        }
         let id = todo.id;
         self.todos.push(todo);
         id
@@ -258,6 +271,17 @@ impl AppState {
         priority: Priority,
         assigned_day: NaiveDate,
     ) -> Result<(), String> {
+        self.update_todo_with_description(id, title, priority, assigned_day, None)
+    }
+
+    pub fn update_todo_with_description(
+        &mut self,
+        id: Uuid,
+        title: String,
+        priority: Priority,
+        assigned_day: NaiveDate,
+        description: Option<String>,
+    ) -> Result<(), String> {
         let todo = self
             .todos
             .iter_mut()
@@ -267,6 +291,13 @@ impl AppState {
         todo.title = title;
         todo.priority = priority;
         todo.assigned_day = assigned_day;
+        todo.description = description.and_then(|value| {
+            if value.trim().is_empty() {
+                None
+            } else {
+                Some(value)
+            }
+        });
         Ok(())
     }
 

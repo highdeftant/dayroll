@@ -107,8 +107,8 @@ fn filter_preserves_overdue_today_separation() -> Result<(), String> {
 }
 
 #[test]
-fn app_search_query_accessors() {
-    let today = date(2026, 4, 18).unwrap();
+fn app_search_query_accessors() -> Result<(), String> {
+    let today = date(2026, 4, 18)?;
     let mut state = AppState::new_for_date(today);
 
     // Initial query should be empty
@@ -121,4 +121,5 @@ fn app_search_query_accessors() {
     // Clear the search query
     state.set_search_query(String::new());
     assert!(state.search_query().is_empty());
+    Ok(())
 }

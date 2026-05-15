@@ -24,6 +24,7 @@ pub struct Todo {
     pub assigned_day: NaiveDate,
     pub created_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
+    pub description: Option<String>, // Markdown description
 }
 
 impl Todo {
@@ -36,6 +37,17 @@ impl Todo {
             assigned_day,
             created_at: Utc::now(),
             completed_at: None,
+            description: None,
         }
+    }
+
+    pub fn with_description(mut self, desc: impl Into<String>) -> Self {
+        let desc = desc.into();
+        if desc.trim().is_empty() {
+            self.description = None;
+        } else {
+            self.description = Some(desc);
+        }
+        self
     }
 }
