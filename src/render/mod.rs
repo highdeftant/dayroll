@@ -172,9 +172,13 @@ pub(crate) fn draw_ui(
 
     frame.render_widget(title, layout[0]);
     frame.render_widget(tasks.outer, layout[1]);
-    frame.render_widget(tasks.queue, tasks.queue_area);
+    frame.render_widget(tasks.today, tasks.today_area);
+    frame.render_widget(tasks.overdue, tasks.overdue_area);
     frame.render_widget(tasks.calendar, tasks.calendar_area);
-    if let Some((scrollbar, mut state, area)) = tasks.scrollbar {
+    if let Some((scrollbar, mut state, area)) = tasks.today_scrollbar {
+        frame.render_stateful_widget(scrollbar, area, &mut state);
+    }
+    if let Some((scrollbar, mut state, area)) = tasks.overdue_scrollbar {
         frame.render_stateful_widget(scrollbar, area, &mut state);
     }
     frame.render_widget(status, layout[2]);

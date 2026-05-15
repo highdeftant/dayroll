@@ -18,11 +18,14 @@ use super::{
 
 pub(super) struct NestedTasksWidget<'a> {
     pub(super) outer: Block<'a>,
-    pub(super) queue: Paragraph<'a>,
-    pub(super) queue_area: Rect,
+    pub(super) today: Paragraph<'a>,
+    pub(super) today_area: Rect,
+    pub(super) overdue: Paragraph<'a>,
+    pub(super) overdue_area: Rect,
     pub(super) calendar: Paragraph<'a>,
     pub(super) calendar_area: Rect,
-    pub(super) scrollbar: Option<(Scrollbar<'a>, ScrollbarState, Rect)>,
+    pub(super) today_scrollbar: Option<(Scrollbar<'a>, ScrollbarState, Rect)>,
+    pub(super) overdue_scrollbar: Option<(Scrollbar<'a>, ScrollbarState, Rect)>,
 }
 
 pub(super) fn build_nested_tasks_widget(
@@ -33,7 +36,7 @@ pub(super) fn build_nested_tasks_widget(
     search_active: bool,
     search_query: &str,
 ) -> NestedTasksWidget<'static> {
-    let overdue = visible_rows.iter().filter(|row| row.overdue).count();
+    let overdue_count = visible_rows.iter().filter(|row| row.overdue).count();
     let done = visible_rows
         .iter()
         .filter(|row| row.status == Status::Done)
@@ -55,7 +58,7 @@ pub(super) fn build_nested_tasks_widget(
             Span::styled(" TASKS ", bar_style().add_modifier(Modifier::BOLD)),
             Span::styled(filter_chip.0, filter_chip.1),
             Span::styled(
-                format!(" ovr:{} todo:{} done:{} ", overdue, pending, done),
+                format!(" todo:{} done:{} overdue:{} ", pending, done, overdue_count),
                 Style::default().fg(C_INFO),
             ),
         ]))
@@ -67,7 +70,7 @@ pub(super) fn build_nested_tasks_widget(
         horizontal: 1,
     });
 
-    let split = if inner.width >= 80 {
+    let horizontal = if inner.width >= 80 {
         Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
@@ -75,47 +78,87 @@ pub(super) fn build_nested_tasks_widget(
     } else {
         Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(7), Constraint::Length(10)])
+            .constraints([Constraint::Min(12), Constraint::Length(10)])
             .split(inner)
     };
 
-    let queue_area = split[0];
-    let calendar_area = split[1];
+    let queue_area = horizontal[0];
+    let calendar_area = horizontal[1];
 
-    let (queue, scrollbar) = draw_queue_panel(
-        queue_area,
-        visible_rows,
+    let queue_split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+        .split(queue_area);
+
+    let today_area = queue_split[0];
+    let overdue_area = queue_split[1];
+
+    let today_rows: Vec<(usize, &VisibleTodo)> = visible_rows
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| !row.overdue)
+        .collect();
+    let overdue_rows: Vec<(usize, &VisibleTodo)> = visible_rows
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| row.overdue)
+        .collect();
+
+    let (today, today_scrollbar) = draw_section_panel(
+        today_area,
+        " New Tasks ",
+        &today_rows,
         selected_index,
         search_active,
         search_query,
+        "no new tasks",
     );
+    let (overdue, overdue_scrollbar) = draw_section_panel(
+        overdue_area,
+        " Overdue ",
+        &overdue_rows,
+        selected_index,
+        search_active,
+        search_query,
+        "no overdue tasks",
+    );
+
     let calendar = draw_calendar_panel(selected_day);
 
     NestedTasksWidget {
         outer,
-        queue,
-        queue_area,
+        today,
+        today_area,
+        overdue,
+        overdue_area,
         calendar,
         calendar_area,
-        scrollbar,
+        today_scrollbar,
+        overdue_scrollbar,
     }
 }
 
-fn draw_queue_panel(
+fn draw_section_panel(
     area: Rect,
-    visible_rows: &[VisibleTodo],
+    title: &'static str,
+    rows: &[(usize, &VisibleTodo)],
     selected_index: usize,
     search_active: bool,
     search_query: &str,
+    empty_label: &'static str,
 ) -> (
     Paragraph<'static>,
     Option<(Scrollbar<'static>, ScrollbarState, Rect)>,
 ) {
     let list_height = usize::from(area.height.saturating_sub(2));
-    let (start, end) = viewport_window(visible_rows.len(), selected_index, list_height);
+    let (start, end) = viewport_window(
+        rows.len(),
+        selected_index_in_rows(rows, selected_index),
+        list_height,
+    );
 
     let mut lines = Vec::<Line<'static>>::new();
-    if visible_rows.is_empty() {
+    if rows.is_empty() {
         let msg = if search_active {
             if search_query.is_empty() {
                 "search active: type to filter"
@@ -123,34 +166,24 @@ fn draw_queue_panel(
                 "no matching tasks"
             }
         } else {
-            "no tasks for selected day"
+            empty_label
         };
         lines.push(Line::from(Span::styled(msg, Style::default().fg(C_MUTED))));
     } else {
-        for (row_idx, row) in visible_rows.iter().enumerate().take(end).skip(start) {
-            let selected = row_idx == selected_index;
+        for (global_idx, row) in rows.iter().take(end).skip(start) {
+            let selected = *global_idx == selected_index;
             let marker_style = if selected {
                 Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(C_MUTED)
             };
 
-            let (status_text, status_style, body_style) = match (row.status, row.overdue) {
-                (Status::Done, _) => (
-                    " DONE ",
-                    chip_style(C_TEXT, C_OK),
-                    Style::default().fg(C_OK),
-                ),
-                (Status::Pending, true) => (
-                    " OVR ",
-                    chip_style(C_TEXT, C_DANGER),
-                    Style::default().fg(C_DANGER),
-                ),
-                (Status::Pending, false) => (
-                    " TODO ",
-                    chip_style(C_TEXT, C_WARN),
-                    Style::default().fg(C_TEXT),
-                ),
+            let status_dot_style = match row.overdue {
+                true => Style::default().fg(C_DANGER).add_modifier(Modifier::BOLD),
+                false => match row.status {
+                    Status::Done => Style::default().fg(C_OK).add_modifier(Modifier::BOLD),
+                    Status::Pending => Style::default().fg(C_WARN).add_modifier(Modifier::BOLD),
+                },
             };
 
             let mut rendered = render_markdown(&row.label)
@@ -159,13 +192,13 @@ fn draw_queue_panel(
                 .map(|line| line.spans.clone())
                 .unwrap_or_else(|| vec![Span::raw(row.label.clone())]);
             for span in &mut rendered {
-                span.style = body_style.patch(span.style);
+                span.style = Style::default().fg(C_TEXT).patch(span.style);
             }
 
             let prio = priority_chip(row.priority);
             let mut row_spans = vec![
                 Span::styled(if selected { "▶ " } else { "  " }, marker_style),
-                Span::styled(status_text, status_style),
+                Span::styled("●", status_dot_style),
                 Span::raw(" "),
                 Span::styled(prio.0, prio.1),
                 Span::raw(" "),
@@ -179,14 +212,15 @@ fn draw_queue_panel(
         .style(Style::default().fg(C_TEXT).bg(C_PANEL))
         .block(
             Block::default()
-                .title(" Queue ")
+                .title(title)
                 .borders(Borders::ALL)
                 .border_style(border_style()),
         );
 
-    let scrollbar = if visible_rows.len() > list_height && list_height > 0 {
-        let state = ScrollbarState::new(visible_rows.len())
-            .position(start)
+    let selected_local = selected_index_in_rows(rows, selected_index);
+    let scrollbar = if rows.len() > list_height && list_height > 0 {
+        let state = ScrollbarState::new(rows.len())
+            .position(start.min(selected_local))
             .viewport_content_length(list_height);
         let sb = Scrollbar::new(ScrollbarOrientation::VerticalRight)
             .thumb_style(Style::default().fg(C_ACCENT))
@@ -201,6 +235,12 @@ fn draw_queue_panel(
     };
 
     (paragraph, scrollbar)
+}
+
+fn selected_index_in_rows(rows: &[(usize, &VisibleTodo)], selected_index: usize) -> usize {
+    rows.iter()
+        .position(|(global_idx, _)| *global_idx == selected_index)
+        .unwrap_or(0)
 }
 
 fn draw_calendar_panel(selected_day: NaiveDate) -> Paragraph<'static> {
