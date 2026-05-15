@@ -88,8 +88,7 @@ pub(crate) fn draw_ui(
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),
-            Constraint::Length(10),
-            Constraint::Min(8),
+            Constraint::Min(14),
             Constraint::Length(3),
         ])
         .split(frame.area());
@@ -146,9 +145,9 @@ pub(crate) fn draw_ui(
             .border_style(border_style()),
     );
 
-    let calendar = widgets::draw_calendar_widget(app.selected_day());
-    let tasks = widgets::draw_tasks_widget(
-        layout[2],
+    let tasks = widgets::build_nested_tasks_widget(
+        layout[1],
+        app.selected_day(),
         visible_rows,
         selected_index,
         app.search_active(),
@@ -172,12 +171,13 @@ pub(crate) fn draw_ui(
     );
 
     frame.render_widget(title, layout[0]);
-    frame.render_widget(calendar, layout[1]);
-    frame.render_widget(tasks.0, layout[2]);
-    if let Some((scrollbar, mut state, area)) = tasks.1 {
+    frame.render_widget(tasks.outer, layout[1]);
+    frame.render_widget(tasks.queue, tasks.queue_area);
+    frame.render_widget(tasks.calendar, tasks.calendar_area);
+    if let Some((scrollbar, mut state, area)) = tasks.scrollbar {
         frame.render_stateful_widget(scrollbar, area, &mut state);
     }
-    frame.render_widget(status, layout[3]);
+    frame.render_widget(status, layout[2]);
 
     panels::draw_modal(frame, modal);
     panels::draw_overlay(frame, overlay);
