@@ -61,6 +61,13 @@ pub(super) fn build_nested_tasks_widget(
     };
 
     let outer = Block::default()
+        .title(Line::from(vec![Span::styled(
+            " DAYROLL ",
+            Style::default()
+                .fg(C_TEXT)
+                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::ITALIC),
+        )]))
         .title_bottom(Line::from(Span::styled(search_chip.0, search_chip.1)))
         .borders(Borders::ALL)
         .border_style(border_style());
