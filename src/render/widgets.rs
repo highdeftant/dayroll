@@ -2,11 +2,12 @@ use chrono::{Datelike, NaiveDate};
 use dayroll::app::{month_grid, viewport_window};
 use dayroll::model::Status;
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
     Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
 };
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::markdown::render_markdown;
 use crate::ui_state::VisibleTodo;
@@ -205,10 +206,16 @@ fn draw_section_panel(
             };
 
             let status_dot_style = match row.overdue {
-                true => Style::default().fg(C_DANGER).add_modifier(Modifier::BOLD),
+                true => Style::default()
+                    .fg(pulsing_dot_color(C_DANGER))
+                    .add_modifier(Modifier::BOLD),
                 false => match row.status {
-                    Status::Done => Style::default().fg(C_OK).add_modifier(Modifier::BOLD),
-                    Status::Pending => Style::default().fg(C_WARN).add_modifier(Modifier::BOLD),
+                    Status::Done => Style::default()
+                        .fg(pulsing_dot_color(C_OK))
+                        .add_modifier(Modifier::BOLD),
+                    Status::Pending => Style::default()
+                        .fg(pulsing_dot_color(C_WARN))
+                        .add_modifier(Modifier::BOLD),
                 },
             };
 
@@ -360,4 +367,52 @@ fn month_name(month: u32) -> &'static str {
         12 => "December",
         _ => "Unknown",
     }
+}
+
+fn pulsing_dot_color(base: Color) -> Color {
+    let dark = darker_variant(base, 0.45);
+    let alpha = pulse_alpha();
+    lerp_color(dark, base, alpha)
+}
+
+fn pulse_alpha() -> f32 {
+    let ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0u128, |duration| duration.as_millis());
+    let cycle_ms = 1400u128;
+    let half = cycle_ms / 2;
+    let phase = ms % cycle_ms;
+
+    if phase <= half {
+        phase as f32 / half as f32
+    } else {
+        (cycle_ms - phase) as f32 / half as f32
+    }
+}
+
+fn darker_variant(color: Color, factor: f32) -> Color {
+    match color {
+        Color::Rgb(r, g, b) => Color::Rgb(
+            ((r as f32) * factor) as u8,
+            ((g as f32) * factor) as u8,
+            ((b as f32) * factor) as u8,
+        ),
+        _ => Color::Black,
+    }
+}
+
+fn lerp_color(from: Color, to: Color, alpha: f32) -> Color {
+    let t = alpha.clamp(0.0, 1.0);
+    match (from, to) {
+        (Color::Rgb(fr, fg, fb), Color::Rgb(tr, tg, tb)) => {
+            Color::Rgb(lerp_u8(fr, tr, t), lerp_u8(fg, tg, t), lerp_u8(fb, tb, t))
+        }
+        _ => to,
+    }
+}
+
+fn lerp_u8(from: u8, to: u8, alpha: f32) -> u8 {
+    let from_f = from as f32;
+    let to_f = to as f32;
+    (from_f + (to_f - from_f) * alpha).round() as u8
 }
