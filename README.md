@@ -7,9 +7,13 @@ A terminal-based task manager with a day-first workflow and nested task/calendar
 Dayroll organizes work into a main **Tasks** panel, an **Overdue** subpanel, and a nested **Calendar** panel. Tasks can be assigned to any date, making it easy to see what needs attention and plan ahead.
 
 Current layout:
-- Top header: day, pending count, done count, clock
 - Main widget: Tasks + Overdue + Calendar
-- Bottom-left of main widget: search filter state chip (`FILTER idle|armed|active`)
+- Main widget top titles: left `日録 // DAYROLL`, center current date, right clock
+- Bottom-left of main widget: search filter state chip (`FILTER idle|active`)
+- Footer status bar: interaction hints and mode state
+
+Title style:
+- Main widget title uses a kanji + english lockup: `日録 // DAYROLL`
 
 ## Workflow
 
@@ -67,6 +71,7 @@ Current layout:
 ### Calendar
 - Nested inside the same main widget as Tasks/Overdue
 - Uses responsive split: side-by-side on wide terminals, stacked on narrow terminals
+- Selected day now has a strong accent background for visibility
 
 ### Priority System
 - **High**: `P1` chip

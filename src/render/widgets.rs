@@ -31,12 +31,12 @@ pub(super) struct NestedTasksWidget<'a> {
 
 pub(super) fn build_nested_tasks_widget(
     area: Rect,
+    current_day: NaiveDate,
     selected_day: NaiveDate,
     now_time: &str,
     visible_rows: &[VisibleTodo],
     selected_index: usize,
     search_active: bool,
-    search_query: &str,
 ) -> NestedTasksWidget<'static> {
     let overdue_count = visible_rows.iter().filter(|row| row.overdue).count();
     let done = visible_rows
@@ -50,11 +50,6 @@ pub(super) fn build_nested_tasks_widget(
             " FILTER idle ",
             chip_style(C_MUTED, ratatui::style::Color::Rgb(55, 66, 78)),
         )
-    } else if search_query.is_empty() {
-        (
-            " FILTER armed ",
-            chip_style(C_WARN, ratatui::style::Color::Rgb(101, 68, 31)),
-        )
     } else {
         (
             " FILTER active ",
@@ -64,7 +59,7 @@ pub(super) fn build_nested_tasks_widget(
 
     let outer = Block::default()
         .title(Line::from(vec![Span::styled(
-            " DAYROLL ",
+            " 日録 // DAYROLL ",
             Style::default()
                 .fg(C_TEXT)
                 .add_modifier(Modifier::BOLD)
@@ -72,7 +67,7 @@ pub(super) fn build_nested_tasks_widget(
         )]))
         .title_top(
             Line::from(Span::styled(
-                format!(" {} ", selected_day),
+                format!(" {} ", current_day),
                 Style::default().fg(C_INFO),
             ))
             .centered(),
@@ -128,11 +123,7 @@ pub(super) fn build_nested_tasks_widget(
         .collect();
 
     let empty_message = if search_active {
-        if search_query.is_empty() {
-            "search active: type to filter"
-        } else {
-            "no matching tasks"
-        }
+        "search active"
     } else {
         "no tasks"
     };
@@ -316,8 +307,8 @@ fn draw_calendar_panel(selected_day: NaiveDate) -> Paragraph<'static> {
                         Some(date) => {
                             let style = if date == selected_day {
                                 Style::default()
-                                    .fg(C_TEXT)
-                                    .bg(C_PANEL)
+                                    .fg(Color::Rgb(18, 22, 28))
+                                    .bg(C_ACCENT)
                                     .add_modifier(Modifier::BOLD)
                             } else {
                                 Style::default().fg(C_TEXT)
@@ -379,7 +370,7 @@ fn pulse_alpha() -> f32 {
     let ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0u128, |duration| duration.as_millis());
-    let cycle_ms = 1400u128;
+    let cycle_ms = 4200u128;
     let half = cycle_ms / 2;
     let phase = ms % cycle_ms;
 

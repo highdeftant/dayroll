@@ -88,14 +88,15 @@ pub(crate) fn draw_ui(
         .constraints([Constraint::Min(14), Constraint::Length(3)])
         .split(frame.area());
 
+    let now = chrono::Local::now();
     let tasks = widgets::build_nested_tasks_widget(
         layout[0],
+        now.date_naive(),
         app.selected_day(),
-        &chrono::Local::now().format("%H:%M:%S").to_string(),
+        &now.format("%H:%M:%S").to_string(),
         visible_rows,
         selected_index,
         app.search_active(),
-        app.search_query(),
     );
 
     let status_hint = footer_hint(overlay, app.search_active(), app.search_query());
