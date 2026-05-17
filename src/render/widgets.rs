@@ -1,6 +1,7 @@
 use chrono::{Datelike, Local, NaiveDate};
 use dayroll::app::{month_grid, viewport_window};
 use dayroll::model::Status;
+use dayroll::theme::{Theme, ThemeName};
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -12,10 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::markdown::render_markdown;
 use crate::ui_state::VisibleTodo;
 
-use super::{
-    C_ACCENT, C_DANGER, C_INFO, C_MUTED, C_OK, C_PANEL, C_TEXT, C_WARN, border_style, chip_style,
-    priority_chip,
-};
+use super::{border_style, chip_style, priority_chip};
 
 pub(super) struct NestedTasksWidget<'a> {
     pub(super) outer: Block<'a>,
@@ -29,15 +27,31 @@ pub(super) struct NestedTasksWidget<'a> {
     pub(super) overdue_scrollbar: Option<(Scrollbar<'a>, ScrollbarState, Rect)>,
 }
 
-pub(super) fn build_nested_tasks_widget(
-    area: Rect,
-    selected_day: NaiveDate,
-    now_time: &str,
-    visible_rows: &[VisibleTodo],
-    selected_index: usize,
-    expanded_task: Option<uuid::Uuid>,
-    search_active: bool,
-) -> NestedTasksWidget<'static> {
+pub(super) struct TasksWidgetInput<'a> {
+    pub(super) area: Rect,
+    pub(super) selected_day: NaiveDate,
+    pub(super) now_time: &'a str,
+    pub(super) visible_rows: &'a [VisibleTodo],
+    pub(super) selected_index: usize,
+    pub(super) expanded_task: Option<uuid::Uuid>,
+    pub(super) search_active: bool,
+    pub(super) theme: &'a Theme,
+    pub(super) theme_name: ThemeName,
+}
+
+pub(super) fn build_nested_tasks_widget(input: TasksWidgetInput<'_>) -> NestedTasksWidget<'static> {
+    let TasksWidgetInput {
+        area,
+        selected_day,
+        now_time,
+        visible_rows,
+        selected_index,
+        expanded_task,
+        search_active,
+        theme,
+        theme_name,
+    } = input;
+
     let current_day = Local::now().date_naive();
     let overdue_count = visible_rows.iter().filter(|row| row.overdue).count();
     let done = visible_rows
@@ -49,40 +63,45 @@ pub(super) fn build_nested_tasks_widget(
     let search_chip = if !search_active {
         (
             " FILTER idle ",
-            chip_style(C_MUTED, ratatui::style::Color::Rgb(55, 66, 78)),
+            chip_style(theme.muted, Color::Rgb(55, 66, 78)),
         )
     } else {
         (
             " FILTER active ",
-            chip_style(C_TEXT, ratatui::style::Color::Rgb(55, 80, 109)),
+            chip_style(theme.text, Color::Rgb(55, 80, 109)),
         )
     };
 
+    let theme_chip = chip_style(theme.text, Color::Rgb(61, 73, 88));
+
     let outer = Block::default()
-        .title(Line::from(vec![Span::styled(
-            " 日録 // DAYROLL ",
-            Style::default()
-                .fg(C_TEXT)
-                .add_modifier(Modifier::BOLD)
-                .add_modifier(Modifier::ITALIC),
-        )]))
+        .title(Line::from(vec![
+            Span::styled(
+                " 日録 // DAYROLL ",
+                Style::default()
+                    .fg(theme.text)
+                    .add_modifier(Modifier::BOLD)
+                    .add_modifier(Modifier::ITALIC),
+            ),
+            Span::styled(format!("  theme:{} ", theme_name.as_str()), theme_chip),
+        ]))
         .title_top(
             Line::from(Span::styled(
                 format!(" {} ", current_day),
-                Style::default().fg(C_INFO),
+                Style::default().fg(theme.info),
             ))
             .centered(),
         )
         .title_top(
             Line::from(Span::styled(
                 format!(" {} ", now_time),
-                Style::default().fg(C_INFO).add_modifier(Modifier::DIM),
+                Style::default().fg(theme.info).add_modifier(Modifier::DIM),
             ))
             .right_aligned(),
         )
         .title_bottom(Line::from(Span::styled(search_chip.0, search_chip.1)))
         .borders(Borders::ALL)
-        .border_style(border_style());
+        .border_style(border_style(theme));
 
     let inner = outer.inner(area).inner(Margin {
         vertical: 1,
@@ -140,6 +159,7 @@ pub(super) fn build_nested_tasks_widget(
             " todo:{} done:{} overdue:{} ",
             pending, done, overdue_count
         )),
+        theme,
     );
     let (overdue, overdue_scrollbar) = draw_section_panel(
         overdue_area,
@@ -149,9 +169,10 @@ pub(super) fn build_nested_tasks_widget(
         expanded_task,
         empty_message,
         None,
+        theme,
     );
 
-    let calendar = draw_calendar_panel(selected_day);
+    let calendar = draw_calendar_panel(selected_day, theme);
 
     NestedTasksWidget {
         outer,
@@ -166,6 +187,7 @@ pub(super) fn build_nested_tasks_widget(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_section_panel(
     area: Rect,
     title: &'static str,
@@ -174,6 +196,7 @@ fn draw_section_panel(
     expanded_task: Option<uuid::Uuid>,
     empty_message: &str,
     metrics: Option<String>,
+    theme: &Theme,
 ) -> (
     Paragraph<'static>,
     Option<(Scrollbar<'static>, ScrollbarState, Rect)>,
@@ -186,7 +209,7 @@ fn draw_section_panel(
     if rows.is_empty() {
         rendered_lines.push(Line::from(Span::styled(
             empty_message.to_string(),
-            Style::default().fg(C_MUTED),
+            Style::default().fg(theme.muted),
         )));
     } else {
         for (global_idx, row) in rows {
@@ -196,21 +219,23 @@ fn draw_section_panel(
 
             let selected = *global_idx == selected_index;
             let marker_style = if selected {
-                Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(C_MUTED)
+                Style::default().fg(theme.muted)
             };
 
             let status_dot_style = match row.overdue {
                 true => Style::default()
-                    .fg(pulsing_dot_color(C_DANGER))
+                    .fg(pulsing_dot_color(theme.danger))
                     .add_modifier(Modifier::BOLD),
                 false => match row.status {
                     Status::Done => Style::default()
-                        .fg(pulsing_dot_color(C_OK))
+                        .fg(pulsing_dot_color(theme.ok))
                         .add_modifier(Modifier::BOLD),
                     Status::Pending => Style::default()
-                        .fg(pulsing_dot_color(C_WARN))
+                        .fg(pulsing_dot_color(theme.warn))
                         .add_modifier(Modifier::BOLD),
                 },
             };
@@ -231,13 +256,13 @@ fn draw_section_panel(
                 .map(|line| line.spans.clone())
                 .unwrap_or_else(|| vec![Span::raw(row.label.clone())]);
             for span in &mut rendered {
-                span.style = Style::default().fg(C_TEXT).patch(span.style);
+                span.style = Style::default().fg(theme.text).patch(span.style);
             }
 
-            let prio = priority_chip(row.priority);
+            let prio = priority_chip(row.priority, theme);
             let mut row_spans = vec![
                 Span::styled(if selected { "▶ " } else { "  " }, marker_style),
-                Span::styled(node_glyph, Style::default().fg(C_INFO)),
+                Span::styled(node_glyph, Style::default().fg(theme.info)),
                 Span::styled("●", status_dot_style),
                 Span::raw(" "),
                 Span::styled(prio.0, prio.1),
@@ -254,10 +279,10 @@ fn draw_section_panel(
                         .map(|line| line.spans.clone())
                         .unwrap_or_else(|| vec![Span::raw(description.clone())]);
                     let mut detail_spans =
-                        vec![Span::styled("   └─ ", Style::default().fg(C_MUTED))];
+                        vec![Span::styled("   └─ ", Style::default().fg(theme.muted))];
                     for mut span in detail {
                         span.style = Style::default()
-                            .fg(C_MUTED)
+                            .fg(theme.muted)
                             .add_modifier(Modifier::ITALIC)
                             .patch(span.style);
                         detail_spans.push(span);
@@ -276,7 +301,7 @@ fn draw_section_panel(
         .take(end.saturating_sub(start))
         .collect::<Vec<_>>();
     let paragraph = Paragraph::new(lines)
-        .style(Style::default().fg(C_TEXT).bg(C_PANEL))
+        .style(Style::default().fg(theme.text).bg(theme.panel))
         .block(
             Block::default()
                 .title(title)
@@ -285,14 +310,14 @@ fn draw_section_panel(
                         .map(|value| {
                             Line::from(Span::styled(
                                 value,
-                                Style::default().fg(C_INFO).add_modifier(Modifier::DIM),
+                                Style::default().fg(theme.info).add_modifier(Modifier::DIM),
                             ))
                             .right_aligned()
                         })
                         .unwrap_or_else(|| Line::from("")),
                 )
                 .borders(Borders::ALL)
-                .border_style(border_style()),
+                .border_style(border_style(theme)),
         );
 
     let selected_local = selected_index_in_rows(rows, selected_index);
@@ -301,8 +326,8 @@ fn draw_section_panel(
             .position(start.min(selected_local))
             .viewport_content_length(list_height);
         let sb = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .thumb_style(Style::default().fg(C_ACCENT))
-            .track_style(Style::default().fg(C_MUTED));
+            .thumb_style(Style::default().fg(theme.accent))
+            .track_style(Style::default().fg(theme.muted));
         let sb_area = area.inner(Margin {
             vertical: 1,
             horizontal: 0,
@@ -321,7 +346,7 @@ fn selected_index_in_rows(rows: &[(usize, &VisibleTodo)], selected_index: usize)
         .unwrap_or(0)
 }
 
-fn draw_calendar_panel(selected_day: NaiveDate) -> Paragraph<'static> {
+fn draw_calendar_panel(selected_day: NaiveDate, theme: &Theme) -> Paragraph<'static> {
     let mut lines = Vec::<Line<'static>>::new();
     lines.push(Line::from(vec![Span::styled(
         format!(
@@ -329,15 +354,17 @@ fn draw_calendar_panel(selected_day: NaiveDate) -> Paragraph<'static> {
             month_name(selected_day.month()),
             selected_day.year()
         ),
-        Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD),
     )]));
     lines.push(Line::from(Span::styled(
         selected_day.format("%a %Y-%m-%d").to_string(),
-        Style::default().fg(C_INFO),
+        Style::default().fg(theme.info),
     )));
     lines.push(Line::from(Span::styled(
         " Mo Tu We Th Fr Sa Su",
-        Style::default().fg(C_MUTED),
+        Style::default().fg(theme.muted),
     )));
 
     match month_grid(selected_day) {
@@ -351,14 +378,14 @@ fn draw_calendar_panel(selected_day: NaiveDate) -> Paragraph<'static> {
                             let style = if date == selected_day {
                                 Style::default()
                                     .fg(Color::Rgb(18, 22, 28))
-                                    .bg(C_ACCENT)
+                                    .bg(theme.accent)
                                     .add_modifier(Modifier::BOLD)
                             } else {
-                                Style::default().fg(C_TEXT)
+                                Style::default().fg(theme.text)
                             };
                             spans.push(Span::styled(format!("{:>2}", date.day()), style));
                         }
-                        None => spans.push(Span::styled("  ", Style::default().fg(C_MUTED))),
+                        None => spans.push(Span::styled("  ", Style::default().fg(theme.muted))),
                     }
                     if day_col < 6 {
                         spans.push(Span::raw(" "));
@@ -370,18 +397,18 @@ fn draw_calendar_panel(selected_day: NaiveDate) -> Paragraph<'static> {
         Err(error) => {
             lines.push(Line::from(Span::styled(
                 error,
-                Style::default().fg(C_DANGER),
+                Style::default().fg(theme.danger),
             )));
         }
     }
 
     Paragraph::new(lines)
-        .style(Style::default().fg(C_TEXT).bg(C_PANEL))
+        .style(Style::default().fg(theme.text).bg(theme.panel))
         .block(
             Block::default()
                 .title(" Calendar ")
                 .borders(Borders::ALL)
-                .border_style(border_style()),
+                .border_style(border_style(theme)),
         )
 }
 

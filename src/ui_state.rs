@@ -1,5 +1,7 @@
 use chrono::NaiveDate;
+use dayroll::app::Overlay;
 use dayroll::model::{Priority, Status};
+use dayroll::theme::ThemeName;
 
 #[derive(Debug, Clone)]
 pub(crate) struct VisibleTodo {
@@ -41,4 +43,12 @@ pub(crate) enum ModalState {
     None,
     TaskForm(TaskFormState),
     MoveDate(MoveDateState),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct UiViewState {
+    pub(crate) selected_index: usize,
+    pub(crate) expanded_task: Option<uuid::Uuid>,
+    pub(crate) theme_name: ThemeName,
+    pub(crate) overlay: Overlay,
 }

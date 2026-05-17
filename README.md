@@ -9,6 +9,7 @@ Dayroll organizes work into a main **Tasks** panel, an **Overdue** subpanel, and
 Current layout:
 - Main widget: Tasks + Overdue + Calendar
 - Main widget top titles: left `日録 // DAYROLL`, center current date, right clock
+- Main widget title also shows active theme chip: `theme:<name>`
 - Bottom-left of main widget: search filter state chip (`FILTER idle|active`)
 - Footer status bar: interaction hints and mode state
 
@@ -42,10 +43,12 @@ Title style:
 | `a` | Add new task |
 | `e` | Edit task (title, priority, date) |
 | `m` | Move task to different date |
-| `d` | Delete task |
-| `Enter` / `Space` | Toggle task completion |
+| `d` | Delete selected task |
+| `Enter` / `Space` | Toggle task done/pending |
 | `u` | Undo last move/delete/toggle |
 | `/` | Enter search mode |
+| `l` / `h` | Expand/collapse selected task description |
+| `T` / `Y` | Next/previous theme |
 | `Esc` (in search) | Clear/exit search |
 | `?` | Open/close help |
 | `q` | Quit (with confirmation) |
@@ -62,6 +65,8 @@ Title style:
 - Active list for non-overdue items on/around the selected day view
 - Header includes right-aligned counters: `todo`, `done`, `overdue`
 - Rows use selection marker + status dot + priority chip
+- Tasks with description show tree glyphs (`▸` collapsed, `▾` expanded)
+- Expanded description renders as nested child row (`└─ ...`)
 
 ### Overdue
 - Incomplete tasks from past dates
@@ -144,7 +149,7 @@ Tasks are stored in `~/.dayroll/todos.json`
 - [x] Fix Clippy warnings
 - [x] Add README documentation
 - [x] Search mode for tasks
-- [ ] Dark mode / theme customization
+- [x] Theme customization (Dayroll, Nord, Gruvbox, Tokyo Night)
 
 ### Planned
 - [ ] Tags and categories

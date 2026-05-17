@@ -16,11 +16,12 @@ use crossterm::terminal::{
 use dayroll::app::{AppState, Overlay, UndoSlot, request_quit_overlay, toggle_help_overlay};
 use dayroll::model::Priority;
 use dayroll::storage::{Store, TodoStore};
+use dayroll::theme::{AppConfig, load_config, save_config};
 use ratatui::Terminal;
 
 use crate::event_handler::{handle_modal_event, handle_search_key};
 use crate::render::{draw_ui, visible_todos};
-use crate::ui_state::{ModalState, MoveDateState, TaskFormField, TaskFormState};
+use crate::ui_state::{ModalState, MoveDateState, TaskFormField, TaskFormState, UiViewState};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let result = run_app();
@@ -35,6 +36,7 @@ fn run_app() -> Result<(), String> {
     let today = Local::now().date_naive();
     let store = Store::new_file(Store::default_path());
     let todos = store.load()?;
+    let mut config = load_config().unwrap_or_else(|_| AppConfig::default());
     let mut app = AppState::with_todos(today, todos);
     let mut selected_index = 0usize;
     let mut expanded_task: Option<uuid::Uuid> = None;
@@ -67,10 +69,13 @@ fn run_app() -> Result<(), String> {
                         frame,
                         &app,
                         &visible_rows,
-                        selected_index,
-                        expanded_task,
+                        UiViewState {
+                            selected_index,
+                            expanded_task,
+                            theme_name: config.theme,
+                            overlay,
+                        },
                         &modal,
-                        overlay,
                     )
                 })
                 .map_err(|error| format!("draw failed: {error}"))?;
@@ -223,6 +228,14 @@ fn run_app() -> Result<(), String> {
                     if visible_rows.get(selected_index).map(|row| row.id) == expanded_task {
                         expanded_task = None;
                     }
+                }
+                KeyCode::Char('T') => {
+                    config.theme = config.theme.next();
+                    save_config(&config)?;
+                }
+                KeyCode::Char('Y') => {
+                    config.theme = config.theme.previous();
+                    save_config(&config)?;
                 }
                 _ => {}
             }

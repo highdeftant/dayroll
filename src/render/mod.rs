@@ -1,44 +1,33 @@
-use dayroll::app::{AppState, DayBuckets, Overlay, footer_hint};
+use dayroll::app::{AppState, DayBuckets, footer_hint};
 use dayroll::model::Priority;
+use dayroll::theme::{Theme, theme_by_name};
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 
-use crate::ui_state::{ModalState, VisibleTodo};
+use crate::ui_state::{ModalState, UiViewState, VisibleTodo};
 
 mod panels;
 mod widgets;
 
-pub(super) const C_BG: Color = Color::Rgb(26, 31, 38);
-pub(super) const C_PANEL: Color = Color::Rgb(34, 41, 50);
-pub(super) const C_BAR: Color = Color::Rgb(30, 36, 44);
-pub(super) const C_BORDER: Color = Color::Rgb(95, 110, 126);
-pub(super) const C_TEXT: Color = Color::Rgb(232, 238, 244);
-pub(super) const C_MUTED: Color = Color::Rgb(176, 187, 198);
-pub(super) const C_ACCENT: Color = Color::Rgb(233, 165, 89);
-pub(super) const C_INFO: Color = Color::Rgb(142, 177, 222);
-pub(super) const C_OK: Color = Color::Rgb(132, 225, 164);
-pub(super) const C_WARN: Color = Color::Rgb(242, 197, 107);
-pub(super) const C_DANGER: Color = Color::Rgb(236, 120, 92);
-
-pub(super) fn border_style() -> Style {
-    Style::default().fg(C_BORDER)
+pub(super) fn border_style(theme: &Theme) -> Style {
+    Style::default().fg(theme.border)
 }
 
-pub(super) fn bar_style() -> Style {
-    Style::default().fg(C_TEXT).bg(C_BAR)
+pub(super) fn bar_style(theme: &Theme) -> Style {
+    Style::default().fg(theme.text).bg(theme.bar)
 }
 
 pub(super) fn chip_style(fg: Color, bg: Color) -> Style {
     Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD)
 }
 
-pub(super) fn priority_chip(priority: Priority) -> (&'static str, Style) {
+pub(super) fn priority_chip(priority: Priority, theme: &Theme) -> (&'static str, Style) {
     match priority {
-        Priority::High => (" P1 ", chip_style(C_TEXT, Color::Rgb(118, 72, 38))),
-        Priority::Medium => (" P2 ", chip_style(C_TEXT, Color::Rgb(57, 81, 108))),
-        Priority::Low => (" P3 ", chip_style(C_MUTED, Color::Rgb(55, 66, 78))),
+        Priority::High => (" P1 ", chip_style(theme.text, Color::Rgb(118, 72, 38))),
+        Priority::Medium => (" P2 ", chip_style(theme.text, Color::Rgb(57, 81, 108))),
+        Priority::Low => (" P3 ", chip_style(theme.muted, Color::Rgb(55, 66, 78))),
     }
 }
 
@@ -76,13 +65,13 @@ pub(crate) fn draw_ui(
     frame: &mut ratatui::Frame<'_>,
     app: &AppState,
     visible_rows: &[VisibleTodo],
-    selected_index: usize,
-    expanded_task: Option<uuid::Uuid>,
+    view: UiViewState,
     modal: &ModalState,
-    overlay: Overlay,
 ) {
+    let theme = theme_by_name(view.theme_name);
+
     frame.render_widget(
-        Block::default().style(Style::default().bg(C_BG)),
+        Block::default().style(Style::default().bg(theme.bg)),
         frame.area(),
     );
 
@@ -92,30 +81,32 @@ pub(crate) fn draw_ui(
         .split(frame.area());
 
     let now = chrono::Local::now();
-    let tasks = widgets::build_nested_tasks_widget(
-        layout[0],
-        app.selected_day(),
-        &now.format("%H:%M:%S").to_string(),
+    let tasks = widgets::build_nested_tasks_widget(widgets::TasksWidgetInput {
+        area: layout[0],
+        selected_day: app.selected_day(),
+        now_time: &now.format("%H:%M:%S").to_string(),
         visible_rows,
-        selected_index,
-        expanded_task,
-        app.search_active(),
-    );
+        selected_index: view.selected_index,
+        expanded_task: view.expanded_task,
+        search_active: app.search_active(),
+        theme: &theme,
+        theme_name: view.theme_name,
+    });
 
-    let status_hint = footer_hint(overlay, app.search_active(), app.search_query());
+    let status_hint = footer_hint(view.overlay, app.search_active(), app.search_query());
     let status = Paragraph::new(Line::from(vec![
-        Span::styled(" status ", chip_style(C_INFO, C_BAR)),
-        Span::styled(format!(" {} ", status_hint.0), bar_style()),
+        Span::styled(" status ", chip_style(theme.info, theme.bar)),
+        Span::styled(format!(" {} ", status_hint.0), bar_style(&theme)),
         Span::styled(
             format!(" {} ", status_hint.1),
-            chip_style(C_TEXT, Color::Rgb(57, 79, 106)),
+            chip_style(theme.text, Color::Rgb(57, 79, 106)),
         ),
     ]))
-    .style(bar_style())
+    .style(bar_style(&theme))
     .block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(border_style()),
+            .border_style(border_style(&theme)),
     );
 
     frame.render_widget(tasks.outer, layout[0]);
@@ -130,6 +121,6 @@ pub(crate) fn draw_ui(
     }
     frame.render_widget(status, layout[1]);
 
-    panels::draw_modal(frame, modal);
-    panels::draw_overlay(frame, overlay);
+    panels::draw_modal(frame, modal, &theme);
+    panels::draw_overlay(frame, view.overlay, &theme);
 }
