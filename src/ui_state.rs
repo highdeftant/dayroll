@@ -5,6 +5,7 @@ use dayroll::model::{Priority, Status};
 pub(crate) struct VisibleTodo {
     pub(crate) id: uuid::Uuid,
     pub(crate) label: String,
+    pub(crate) description: Option<String>,
     pub(crate) overdue: bool,
     pub(crate) status: Status,
     pub(crate) priority: Priority,

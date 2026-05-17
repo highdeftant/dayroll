@@ -37,6 +37,7 @@ fn run_app() -> Result<(), String> {
     let todos = store.load()?;
     let mut app = AppState::with_todos(today, todos);
     let mut selected_index = 0usize;
+    let mut expanded_task: Option<uuid::Uuid> = None;
     let mut modal = ModalState::None;
     let mut overlay = Overlay::None;
     let mut undo_slot = UndoSlot::new();
@@ -61,7 +62,17 @@ fn run_app() -> Result<(), String> {
             }
 
             terminal
-                .draw(|frame| draw_ui(frame, &app, &visible_rows, selected_index, &modal, overlay))
+                .draw(|frame| {
+                    draw_ui(
+                        frame,
+                        &app,
+                        &visible_rows,
+                        selected_index,
+                        expanded_task,
+                        &modal,
+                        overlay,
+                    )
+                })
                 .map_err(|error| format!("draw failed: {error}"))?;
 
             if !event::poll(Duration::from_millis(250))
@@ -197,6 +208,20 @@ fn run_app() -> Result<(), String> {
                 KeyCode::Char('k') | KeyCode::Up => {
                     if selected_index > 0 {
                         selected_index = selected_index.saturating_sub(1);
+                    }
+                }
+                KeyCode::Char('l') => {
+                    expanded_task = visible_rows.get(selected_index).and_then(|row| {
+                        if row.description.is_some() {
+                            Some(row.id)
+                        } else {
+                            None
+                        }
+                    });
+                }
+                KeyCode::Char('h') => {
+                    if visible_rows.get(selected_index).map(|row| row.id) == expanded_task {
+                        expanded_task = None;
                     }
                 }
                 _ => {}

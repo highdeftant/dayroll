@@ -1,4 +1,4 @@
-use chrono::{Datelike, NaiveDate};
+use chrono::{Datelike, Local, NaiveDate};
 use dayroll::app::{month_grid, viewport_window};
 use dayroll::model::Status;
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
@@ -31,13 +31,14 @@ pub(super) struct NestedTasksWidget<'a> {
 
 pub(super) fn build_nested_tasks_widget(
     area: Rect,
-    current_day: NaiveDate,
     selected_day: NaiveDate,
     now_time: &str,
     visible_rows: &[VisibleTodo],
     selected_index: usize,
+    expanded_task: Option<uuid::Uuid>,
     search_active: bool,
 ) -> NestedTasksWidget<'static> {
+    let current_day = Local::now().date_naive();
     let overdue_count = visible_rows.iter().filter(|row| row.overdue).count();
     let done = visible_rows
         .iter()
@@ -133,6 +134,7 @@ pub(super) fn build_nested_tasks_widget(
         " Tasks ",
         &today_rows,
         selected_index,
+        expanded_task,
         empty_message,
         Some(format!(
             " todo:{} done:{} overdue:{} ",
@@ -144,6 +146,7 @@ pub(super) fn build_nested_tasks_widget(
         " Overdue ",
         &overdue_rows,
         selected_index,
+        expanded_task,
         empty_message,
         None,
     );
@@ -168,6 +171,7 @@ fn draw_section_panel(
     title: &'static str,
     rows: &[(usize, &VisibleTodo)],
     selected_index: usize,
+    expanded_task: Option<uuid::Uuid>,
     empty_message: &str,
     metrics: Option<String>,
 ) -> (
@@ -175,20 +179,21 @@ fn draw_section_panel(
     Option<(Scrollbar<'static>, ScrollbarState, Rect)>,
 ) {
     let list_height = usize::from(area.height.saturating_sub(2));
-    let (start, end) = viewport_window(
-        rows.len(),
-        selected_index_in_rows(rows, selected_index),
-        list_height,
-    );
 
-    let mut lines = Vec::<Line<'static>>::new();
+    let mut rendered_lines = Vec::<Line<'static>>::new();
+    let mut selected_visual_index = 0usize;
+
     if rows.is_empty() {
-        lines.push(Line::from(Span::styled(
+        rendered_lines.push(Line::from(Span::styled(
             empty_message.to_string(),
             Style::default().fg(C_MUTED),
         )));
     } else {
-        for (global_idx, row) in rows.iter().take(end).skip(start) {
+        for (global_idx, row) in rows {
+            if *global_idx == selected_index {
+                selected_visual_index = rendered_lines.len();
+            }
+
             let selected = *global_idx == selected_index;
             let marker_style = if selected {
                 Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)
@@ -210,6 +215,16 @@ fn draw_section_panel(
                 },
             };
 
+            let node_glyph = if row.description.is_some() {
+                if expanded_task == Some(row.id) {
+                    "▾ "
+                } else {
+                    "▸ "
+                }
+            } else {
+                "  "
+            };
+
             let mut rendered = render_markdown(&row.label)
                 .lines
                 .first()
@@ -222,16 +237,44 @@ fn draw_section_panel(
             let prio = priority_chip(row.priority);
             let mut row_spans = vec![
                 Span::styled(if selected { "▶ " } else { "  " }, marker_style),
+                Span::styled(node_glyph, Style::default().fg(C_INFO)),
                 Span::styled("●", status_dot_style),
                 Span::raw(" "),
                 Span::styled(prio.0, prio.1),
                 Span::raw(" "),
             ];
             row_spans.extend(rendered);
-            lines.push(Line::from(row_spans));
+            rendered_lines.push(Line::from(row_spans));
+
+            match (expanded_task, row.description.as_ref()) {
+                (Some(expanded_id), Some(description)) if expanded_id == row.id => {
+                    let detail = render_markdown(description)
+                        .lines
+                        .first()
+                        .map(|line| line.spans.clone())
+                        .unwrap_or_else(|| vec![Span::raw(description.clone())]);
+                    let mut detail_spans =
+                        vec![Span::styled("   └─ ", Style::default().fg(C_MUTED))];
+                    for mut span in detail {
+                        span.style = Style::default()
+                            .fg(C_MUTED)
+                            .add_modifier(Modifier::ITALIC)
+                            .patch(span.style);
+                        detail_spans.push(span);
+                    }
+                    rendered_lines.push(Line::from(detail_spans));
+                }
+                _ => {}
+            }
         }
     }
 
+    let (start, end) = viewport_window(rendered_lines.len(), selected_visual_index, list_height);
+    let lines = rendered_lines
+        .into_iter()
+        .skip(start)
+        .take(end.saturating_sub(start))
+        .collect::<Vec<_>>();
     let paragraph = Paragraph::new(lines)
         .style(Style::default().fg(C_TEXT).bg(C_PANEL))
         .block(

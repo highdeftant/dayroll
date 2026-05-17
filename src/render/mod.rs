@@ -51,6 +51,7 @@ pub(crate) fn visible_todos(app: &AppState) -> Vec<VisibleTodo> {
         rows.push(VisibleTodo {
             id: todo.id,
             label: format!("{} ({})", todo.title, todo.assigned_day),
+            description: todo.description.clone(),
             overdue: true,
             status: todo.status,
             priority: todo.priority,
@@ -61,6 +62,7 @@ pub(crate) fn visible_todos(app: &AppState) -> Vec<VisibleTodo> {
         rows.push(VisibleTodo {
             id: todo.id,
             label: todo.title.clone(),
+            description: todo.description.clone(),
             overdue: false,
             status: todo.status,
             priority: todo.priority,
@@ -75,6 +77,7 @@ pub(crate) fn draw_ui(
     app: &AppState,
     visible_rows: &[VisibleTodo],
     selected_index: usize,
+    expanded_task: Option<uuid::Uuid>,
     modal: &ModalState,
     overlay: Overlay,
 ) {
@@ -91,11 +94,11 @@ pub(crate) fn draw_ui(
     let now = chrono::Local::now();
     let tasks = widgets::build_nested_tasks_widget(
         layout[0],
-        now.date_naive(),
         app.selected_day(),
         &now.format("%H:%M:%S").to_string(),
         visible_rows,
         selected_index,
+        expanded_task,
         app.search_active(),
     );
 
