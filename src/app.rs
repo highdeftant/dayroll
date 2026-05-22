@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use chrono::{Datelike, Days, NaiveDate};
 use uuid::Uuid;
 
@@ -41,26 +43,45 @@ pub enum UndoAction {
     },
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct UndoSlot {
-    pending: Option<UndoAction>,
+    pending: VecDeque<UndoAction>,
+    capacity: usize,
+}
+
+impl Default for UndoSlot {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl UndoSlot {
+    pub const DEFAULT_CAPACITY: usize = 32;
+
     pub fn new() -> Self {
-        Self { pending: None }
+        Self::with_capacity(Self::DEFAULT_CAPACITY)
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            pending: VecDeque::new(),
+            capacity: capacity.max(1),
+        }
     }
 
     pub fn record(&mut self, action: UndoAction) {
-        self.pending = Some(action);
+        self.pending.push_back(action);
+        while self.pending.len() > self.capacity {
+            self.pending.pop_front();
+        }
     }
 
     pub fn clear(&mut self) {
-        self.pending = None;
+        self.pending.clear();
     }
 
     pub fn take(&mut self) -> Option<UndoAction> {
-        self.pending.take()
+        self.pending.pop_back()
     }
 }
 
@@ -379,7 +400,7 @@ pub fn month_grid(selected_day: NaiveDate) -> Result<Vec<Option<NaiveDate>>, Str
     let month = selected_day.month();
     let first = NaiveDate::from_ymd_opt(year, month, 1)
         .ok_or_else(|| format!("invalid month start: {year}-{month}"))?;
-    let offset_u32 = first.weekday().num_days_from_monday();
+    let offset_u32 = first.weekday().num_days_from_sunday();
     let offset = usize::try_from(offset_u32)
         .map_err(|_| format!("weekday offset overflow: {offset_u32}"))?;
     let total_days = days_in_month(year, month)?;
