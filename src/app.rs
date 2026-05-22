@@ -373,18 +373,17 @@ impl DayBuckets {
     }
 
     pub fn filter_by_query(&self, query: &str) -> Self {
-        let query_lower = query.to_lowercase();
         let filtered_overdue = self
             .overdue
             .iter()
-            .filter(|todo| query.is_empty() || todo.title.to_lowercase().contains(&query_lower))
+            .filter(|todo| title_matches_query(&todo.title, query))
             .cloned()
             .collect::<Vec<_>>();
 
         let filtered_today = self
             .today
             .iter()
-            .filter(|todo| query.is_empty() || todo.title.to_lowercase().contains(&query_lower))
+            .filter(|todo| title_matches_query(&todo.title, query))
             .cloned()
             .collect::<Vec<_>>();
 
@@ -393,6 +392,41 @@ impl DayBuckets {
             today: filtered_today,
         }
     }
+}
+
+fn title_matches_query(title: &str, query: &str) -> bool {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return true;
+    }
+
+    let title = title.to_lowercase();
+    if title.contains(&query) {
+        return true;
+    }
+
+    // token-prefix match: "met" matches "meeting notes"
+    if title
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|token| !token.is_empty() && token.starts_with(&query))
+    {
+        return true;
+    }
+
+    // subsequence match: "mtg" matches "meeting"
+    let mut query_chars = query.chars();
+    let mut current = query_chars.next();
+    for ch in title.chars() {
+        if let Some(qch) = current {
+            if ch == qch {
+                current = query_chars.next();
+            }
+        } else {
+            break;
+        }
+    }
+
+    current.is_none()
 }
 
 pub fn month_grid(selected_day: NaiveDate) -> Result<Vec<Option<NaiveDate>>, String> {

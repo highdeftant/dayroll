@@ -76,6 +76,30 @@ fn filter_by_query_case_insensitive() -> Result<(), String> {
 }
 
 #[test]
+fn filter_by_query_token_prefix_match() -> Result<(), String> {
+    let today = date(2026, 4, 18)?;
+    let task = Todo::new("Pay electric bill", Priority::Medium, today);
+    let buckets = DayBuckets::for_day(today, std::slice::from_ref(&task));
+
+    let filtered = buckets.filter_by_query("elec");
+    assert_eq!(filtered.today.len(), 1);
+    assert_eq!(filtered.today[0].title, task.title);
+    Ok(())
+}
+
+#[test]
+fn filter_by_query_subsequence_match() -> Result<(), String> {
+    let today = date(2026, 4, 18)?;
+    let task = Todo::new("meeting notes", Priority::Low, today);
+    let buckets = DayBuckets::for_day(today, std::slice::from_ref(&task));
+
+    let filtered = buckets.filter_by_query("mtgnts");
+    assert_eq!(filtered.today.len(), 1);
+    assert_eq!(filtered.today[0].title, task.title);
+    Ok(())
+}
+
+#[test]
 fn filter_by_query_no_matches_returns_empty() -> Result<(), String> {
     let today = date(2026, 4, 18)?;
     let task = Todo::new("today task", Priority::Medium, today);
