@@ -1,5 +1,7 @@
 # Dayroll
 
+![Dayroll wordmark](docs/assets/dayroll-wordmark-01-630x127.png)
+
 A terminal-based task manager with a day-first workflow and nested task/calendar layout.
 
 ## Overview
@@ -9,8 +11,8 @@ Dayroll organizes work into a main **Tasks** panel, an **Overdue** subpanel, and
 Current layout:
 - Main widget: Tasks + Overdue + Calendar
 - Main widget top titles: left `日録 // DAYROLL`, center current date, right clock
-- Main widget title also shows active theme chip: `theme:<name>`
 - Bottom-left of main widget: search filter state chip (`FILTER idle|active`)
+- Bottom-right of main widget: active theme chip (`theme:<name>`)
 - Footer status bar: interaction hints and mode state
 
 Title style:
@@ -21,7 +23,7 @@ Title style:
 1. **Launch**: Dayroll opens on today's date, showing all overdue tasks and today's tasks
 2. **Navigate**: Use arrow keys or j/k to move between tasks
 3. **Add tasks**: Press `a` to add a new task
-4. **Edit tasks**: Press `e` to edit a task's title, priority, or assigned date
+4. **Edit tasks**: Press `e` to edit a task's title, description, priority, or assigned date
 5. **Move tasks**: Press `m` to move a task to a different date
 6. **Complete tasks**: Press `Enter` or `Space` to mark tasks as done
 7. **Delete tasks**: Press `d` to delete a task
@@ -65,6 +67,7 @@ Title style:
 - Active list for non-overdue items on/around the selected day view
 - Header includes right-aligned counters: `todo`, `done`, `overdue`
 - Rows use selection marker + status dot + priority chip
+- Done task labels render with strikethrough
 - Tasks with description show tree glyphs (`▸` collapsed, `▾` expanded)
 - Expanded description renders as nested child row (`└─ ...`)
 
@@ -88,6 +91,11 @@ Title style:
 - `●` green = done
 - `●` red = overdue
 
+### Themes
+- Built-in themes: `dayroll`, `nord`, `gruvbox`, `tokyo-night`
+- Cycle with `T` (next) / `Y` (previous)
+- Selected theme is persisted in `~/.config/dayroll/config.toml`
+
 ## Task Operations
 
 ### Adding a Task
@@ -104,7 +112,7 @@ Quick-add tokens (in the title field):
 
 ### Editing a Task
 1. Select a task and press `e`
-2. Edit title, priority, or date fields
+2. Edit title, description, priority, or date fields
 3. Press Enter to save changes
 
 ### Moving a Task
@@ -119,7 +127,8 @@ Quick-add tokens (in the title field):
 ## Storage
 
 ### Location
-Tasks are stored in `~/.dayroll/todos.json`
+- Tasks: `~/.dayroll/todos.json`
+- Runtime config (theme): `~/.config/dayroll/config.toml`
 
 ### Format
 ```json
@@ -127,6 +136,7 @@ Tasks are stored in `~/.dayroll/todos.json`
   {
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "title": "Complete project report",
+    "description": "Draft outline and send for review",
     "status": "pending",
     "priority": "high",
     "assigned_day": "2026-04-22",
@@ -138,6 +148,7 @@ Tasks are stored in `~/.dayroll/todos.json`
 **Fields:**
 - `id`: UUID v4 unique identifier
 - `title`: Task description
+- `description`: Optional markdown notes/details
 - `status`: "pending" or "done"
 - `priority`: "low", "medium", or "high"
 - `assigned_day`: Target date in ISO format (YYYY-MM-DD)
@@ -153,7 +164,6 @@ Tasks are stored in `~/.dayroll/todos.json`
 
 ### Planned
 - [ ] Tags and categories
-- [ ] Task notes/descriptions
 - [ ] Recurring tasks
 - [ ] Statistics and analytics
 - [ ] Export/Import functionality
