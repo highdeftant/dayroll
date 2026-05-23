@@ -373,47 +373,60 @@ impl DayBuckets {
     }
 
     pub fn filter_by_query(&self, query: &str) -> Self {
-        let filtered_overdue = self
+        let query = query.trim().to_lowercase();
+
+        let mut filtered_overdue = self
             .overdue
             .iter()
-            .filter(|todo| title_matches_query(&todo.title, query))
-            .cloned()
+            .filter_map(|todo| {
+                fuzzy_title_score(&todo.title, &query).map(|score| (todo.clone(), score))
+            })
             .collect::<Vec<_>>();
 
-        let filtered_today = self
+        let mut filtered_today = self
             .today
             .iter()
-            .filter(|todo| title_matches_query(&todo.title, query))
-            .cloned()
+            .filter_map(|todo| {
+                fuzzy_title_score(&todo.title, &query).map(|score| (todo.clone(), score))
+            })
             .collect::<Vec<_>>();
 
+        rank_todos_by_score(&mut filtered_overdue);
+        rank_todos_by_score(&mut filtered_today);
+
         Self {
-            overdue: filtered_overdue,
-            today: filtered_today,
+            overdue: filtered_overdue.into_iter().map(|(todo, _)| todo).collect(),
+            today: filtered_today.into_iter().map(|(todo, _)| todo).collect(),
         }
     }
 }
 
-fn title_matches_query(title: &str, query: &str) -> bool {
-    let query = query.trim().to_lowercase();
+fn fuzzy_title_score(title: &str, query: &str) -> Option<usize> {
     if query.is_empty() {
-        return true;
+        return Some(1);
     }
 
     let title = title.to_lowercase();
-    if title.contains(&query) {
-        return true;
+
+    // highest: exact title match
+    if title == query {
+        return Some(500);
     }
 
-    // token-prefix match: "met" matches "meeting notes"
+    // strong: token-prefix match
     if title
         .split(|c: char| !c.is_alphanumeric())
-        .any(|token| !token.is_empty() && token.starts_with(&query))
+        .any(|token| !token.is_empty() && token.starts_with(query))
     {
-        return true;
+        return Some(300);
     }
 
-    // subsequence match: "mtg" matches "meeting"
+    // medium: contiguous substring match (earlier index scores higher)
+    if let Some(index) = title.find(query) {
+        return Some(200usize.saturating_sub(index));
+    }
+
+    // weakest: subsequence match
     let mut query_chars = query.chars();
     let mut current = query_chars.next();
     for ch in title.chars() {
@@ -426,7 +439,16 @@ fn title_matches_query(title: &str, query: &str) -> bool {
         }
     }
 
-    current.is_none()
+    if current.is_none() { Some(100) } else { None }
+}
+
+fn rank_todos_by_score(scored: &mut [(Todo, usize)]) {
+    scored.sort_by(|(a_todo, a_score), (b_todo, b_score)| {
+        b_score
+            .cmp(a_score)
+            .then_with(|| a_todo.title.len().cmp(&b_todo.title.len()))
+            .then_with(|| a_todo.title.cmp(&b_todo.title))
+    });
 }
 
 pub fn month_grid(selected_day: NaiveDate) -> Result<Vec<Option<NaiveDate>>, String> {

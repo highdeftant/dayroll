@@ -1,5 +1,3 @@
-# Dayroll
-
 ![Dayroll wordmark](docs/assets/dayroll-wordmark-01-630x127.png)
 
 A terminal-based task manager with a day-first workflow and nested task/calendar layout.

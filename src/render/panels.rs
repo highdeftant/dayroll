@@ -1,6 +1,6 @@
 use dayroll::app::Overlay;
 use dayroll::theme::Theme;
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
@@ -14,7 +14,7 @@ pub(super) fn draw_overlay(frame: &mut ratatui::Frame<'_>, overlay: Overlay, the
         Overlay::None => {}
         Overlay::Help => {
             render_scrim(frame, theme);
-            let area = centered_rect(68, 60, frame.area());
+            let area = centered_rect(68, 60, 68, 14, frame.area());
             frame.render_widget(Clear, area);
             let text = vec![
                 help_header_line(theme),
@@ -43,7 +43,7 @@ pub(super) fn draw_overlay(frame: &mut ratatui::Frame<'_>, overlay: Overlay, the
         }
         Overlay::QuitConfirm => {
             render_scrim(frame, theme);
-            let area = centered_rect(42, 20, frame.area());
+            let area = centered_rect(42, 20, 34, 9, frame.area());
             frame.render_widget(Clear, area);
             let widget = Paragraph::new(vec![
                 Line::from(Span::styled(
@@ -76,7 +76,7 @@ pub(super) fn draw_modal(frame: &mut ratatui::Frame<'_>, modal: &ModalState, the
         ModalState::None => {}
         ModalState::MoveDate(state) => {
             render_scrim(frame, theme);
-            let area = centered_rect(58, 30, frame.area());
+            let area = centered_rect(58, 30, 48, 11, frame.area());
             frame.render_widget(Clear, area);
             let widget = Paragraph::new(vec![
                 Line::from(Span::styled(
@@ -109,29 +109,13 @@ pub(super) fn draw_modal(frame: &mut ratatui::Frame<'_>, modal: &ModalState, the
         }
         ModalState::TaskForm(form) => {
             render_scrim(frame, theme);
-            let area = centered_rect(72, 46, frame.area());
+            let area = centered_rect(72, 46, 64, 14, frame.area());
             frame.render_widget(Clear, area);
 
-            let title_label = if form.field == TaskFormField::Title {
-                chip_style(theme.bg, theme.warn)
-            } else {
-                chip_style(theme.text, theme.info)
-            };
-            let prio_label = if form.field == TaskFormField::Priority {
-                chip_style(theme.bg, theme.warn)
-            } else {
-                chip_style(theme.text, theme.info)
-            };
-            let date_label = if form.field == TaskFormField::Date {
-                chip_style(theme.bg, theme.warn)
-            } else {
-                chip_style(theme.text, theme.info)
-            };
-            let desc_label = if form.field == TaskFormField::Description {
-                chip_style(theme.bg, theme.warn)
-            } else {
-                chip_style(theme.text, theme.info)
-            };
+            let title_label = field_label_style(form.field == TaskFormField::Title, theme);
+            let prio_label = field_label_style(form.field == TaskFormField::Priority, theme);
+            let date_label = field_label_style(form.field == TaskFormField::Date, theme);
+            let desc_label = field_label_style(form.field == TaskFormField::Description, theme);
 
             let mut lines = vec![
                 Line::from(Span::styled(
@@ -237,24 +221,34 @@ fn description_preview(description: &str) -> String {
     }
 }
 
-fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
-    let vertical = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100u16.saturating_sub(percent_y)) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100u16.saturating_sub(percent_y)) / 2),
-        ])
-        .split(area);
+fn field_label_style(active: bool, theme: &Theme) -> Style {
+    if active {
+        chip_style(theme.bg, theme.accent)
+    } else {
+        chip_style(theme.text, theme.bar)
+    }
+}
 
-    let horizontal = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100u16.saturating_sub(percent_x)) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100u16.saturating_sub(percent_x)) / 2),
-        ])
-        .split(vertical[1]);
+fn centered_rect(
+    percent_x: u16,
+    percent_y: u16,
+    min_width: u16,
+    min_height: u16,
+    area: Rect,
+) -> Rect {
+    let desired_w = area.width.saturating_mul(percent_x).saturating_div(100);
+    let desired_h = area.height.saturating_mul(percent_y).saturating_div(100);
 
-    horizontal[1]
+    let width = desired_w.max(min_width).min(area.width.saturating_sub(2));
+    let height = desired_h.max(min_height).min(area.height.saturating_sub(2));
+
+    let x = area.x + (area.width.saturating_sub(width)) / 2;
+    let y = area.y + (area.height.saturating_sub(height)) / 2;
+
+    Rect {
+        x,
+        y,
+        width: width.max(1),
+        height: height.max(1),
+    }
 }

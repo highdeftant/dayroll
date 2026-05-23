@@ -131,6 +131,33 @@ fn filter_preserves_overdue_today_separation() -> Result<(), String> {
 }
 
 #[test]
+fn fuzzy_filter_ranks_stronger_matches_first() -> Result<(), String> {
+    let today = date(2026, 4, 18)?;
+    let exact = Todo::new("meet", Priority::High, today);
+    let token_prefix = Todo::new("meeting notes", Priority::Medium, today);
+    let substring = Todo::new("premeet prep", Priority::Low, today);
+    let subsequence = Todo::new("my elegant event tracker", Priority::Low, today);
+
+    let buckets = DayBuckets::for_day(
+        today,
+        &[
+            subsequence.clone(),
+            substring.clone(),
+            token_prefix.clone(),
+            exact.clone(),
+        ],
+    );
+
+    let filtered = buckets.filter_by_query("meet");
+    assert_eq!(filtered.today.len(), 4);
+    assert_eq!(filtered.today[0].title, exact.title);
+    assert_eq!(filtered.today[1].title, token_prefix.title);
+    assert_eq!(filtered.today[2].title, substring.title);
+    assert_eq!(filtered.today[3].title, subsequence.title);
+    Ok(())
+}
+
+#[test]
 fn app_search_query_accessors() -> Result<(), String> {
     let today = date(2026, 4, 18)?;
     let mut state = AppState::new_for_date(today);

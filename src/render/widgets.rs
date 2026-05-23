@@ -75,16 +75,13 @@ pub(super) fn build_nested_tasks_widget(input: TasksWidgetInput<'_>) -> NestedTa
     let theme_chip = chip_style(theme.text, Color::Rgb(61, 73, 88));
 
     let outer = Block::default()
-        .title(Line::from(vec![
-            Span::styled(
-                " 日録 // DAYROLL ",
-                Style::default()
-                    .fg(theme.text)
-                    .add_modifier(Modifier::BOLD)
-                    .add_modifier(Modifier::ITALIC),
-            ),
-            Span::styled(format!("  theme:{} ", theme_name.as_str()), theme_chip),
-        ]))
+        .title(Line::from(vec![Span::styled(
+            " 日録 // DAYROLL ",
+            Style::default()
+                .fg(theme.info)
+                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::ITALIC),
+        )]))
         .title_top(
             Line::from(Span::styled(
                 format!(" {} ", current_day),
@@ -100,6 +97,13 @@ pub(super) fn build_nested_tasks_widget(input: TasksWidgetInput<'_>) -> NestedTa
             .right_aligned(),
         )
         .title_bottom(Line::from(Span::styled(search_chip.0, search_chip.1)))
+        .title_bottom(
+            Line::from(Span::styled(
+                format!(" theme:{} ", theme_name.as_str()),
+                theme_chip,
+            ))
+            .right_aligned(),
+        )
         .borders(Borders::ALL)
         .border_style(border_style(theme));
 
@@ -256,7 +260,13 @@ fn draw_section_panel(
                 .map(|line| line.spans.clone())
                 .unwrap_or_else(|| vec![Span::raw(row.label.clone())]);
             for span in &mut rendered {
-                span.style = Style::default().fg(theme.text).patch(span.style);
+                let mut style = Style::default().fg(theme.text).patch(span.style);
+                if row.status == Status::Done {
+                    style = style
+                        .add_modifier(Modifier::CROSSED_OUT)
+                        .add_modifier(Modifier::DIM);
+                }
+                span.style = style;
             }
 
             let prio = priority_chip(row.priority, theme);
@@ -363,7 +373,7 @@ fn draw_calendar_panel(selected_day: NaiveDate, theme: &Theme) -> Paragraph<'sta
         Style::default().fg(theme.info),
     )));
     lines.push(Line::from(Span::styled(
-        " Mo Tu We Th Fr Sa Su",
+        " Su Mo Tu We Th Fr Sa",
         Style::default().fg(theme.muted),
     )));
 

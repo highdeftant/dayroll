@@ -296,7 +296,7 @@ fn undo_restore_after_toggle_returns_previous_status() -> Result<(), String> {
 }
 
 #[test]
-fn undo_slot_holds_only_latest_action() -> Result<(), String> {
+fn undo_slot_behaves_like_lifo_history() -> Result<(), String> {
     let day = date(2026, 4, 18)?;
     let mut state = AppState::new_for_date(day);
     let first_id = state.add_todo("first", Priority::Low, day);
@@ -311,11 +311,17 @@ fn undo_slot_holds_only_latest_action() -> Result<(), String> {
 
     state.apply_undo(
         slot.take()
-            .ok_or_else(|| "expected pending undo action".to_string())?,
+            .ok_or_else(|| "expected first undo action".to_string())?,
     )?;
-
     assert!(state.todo(second_id).is_some());
     assert!(state.todo(first_id).is_none());
+
+    state.apply_undo(
+        slot.take()
+            .ok_or_else(|| "expected second undo action".to_string())?,
+    )?;
+    assert!(state.todo(first_id).is_some());
+
     assert!(slot.take().is_none());
     Ok(())
 }
