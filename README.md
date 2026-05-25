@@ -2,6 +2,12 @@
 
 A terminal-based task manager with a day-first workflow and nested task/calendar layout.
 
+## Screenshots
+
+| Theme Preview 1 | Theme Preview 2 | Theme Preview 3 |
+|---|---|---|
+| ![Dayroll theme preview 1](docs/assets/screenshots/dayroll-theme-01.png) | ![Dayroll theme preview 2](docs/assets/screenshots/dayroll-theme-02.png) | ![Dayroll theme preview 3](docs/assets/screenshots/dayroll-theme-03.png) |
+
 ## Overview
 
 Dayroll organizes work into a main **Tasks** panel, an **Overdue** subpanel, and a nested **Calendar** panel. Tasks can be assigned to any date, making it easy to see what needs attention and plan ahead.
@@ -22,6 +28,8 @@ Title style:
 2. **Navigate**: Use arrow keys or j/k to move between tasks
 3. **Add tasks**: Press `a` to add a new task
 4. **Edit tasks**: Press `e` to edit a task's title, description, priority, or assigned date
+   - In the `description` field, press `Enter` to open the dedicated notes modal
+   - In the notes modal, edit raw markdown on the left, review rendered output on the right, and press `F2` to apply changes back to the task form
 5. **Move tasks**: Press `m` to move a task to a different date
 6. **Complete tasks**: Press `Enter` or `Space` to mark tasks as done
 7. **Delete tasks**: Press `d` to delete a task
@@ -42,6 +50,8 @@ Title style:
 |-----|--------|
 | `a` | Add new task |
 | `e` | Edit task (title, priority, date) |
+| `Enter` on `description` field | Open dedicated notes modal |
+| `F2` in notes modal | Apply markdown draft back to task form |
 | `m` | Move task to different date |
 | `d` | Delete selected task |
 | `Enter` / `Space` | Toggle task done/pending |
@@ -111,7 +121,9 @@ Quick-add tokens (in the title field):
 ### Editing a Task
 1. Select a task and press `e`
 2. Edit title, description, priority, or date fields
-3. Press Enter to save changes
+3. On the `description` field, press `Enter` to open the dedicated notes modal
+4. Edit raw markdown with live rendered preview, then press `F2` to return to the task form
+5. Press Enter from a non-description field to save changes
 
 ### Moving a Task
 1. Select a task and press `m`
@@ -161,6 +173,8 @@ Quick-add tokens (in the title field):
 - [x] Theme customization (Dayroll, Nord, Gruvbox, Tokyo Night)
 
 ### Planned
+- [ ] Rich description/notes reader with dedicated modal and markdown rendering
+- [ ] Day timeline view for scheduled tasks (vertical hour rail / agenda panel)
 - [ ] Tags and categories
 - [ ] Recurring tasks
 - [ ] Statistics and analytics
