@@ -4,7 +4,7 @@ use dayroll::app::{AppState, UndoSlot, parse_quick_add, shift_month_date};
 use dayroll::model::Priority;
 use dayroll::storage::{Store, TodoStore};
 
-use crate::ui_state::{ModalState, TaskFormField};
+use crate::ui_state::{DescriptionEditorState, ModalState, TaskFormField};
 
 pub(crate) fn handle_search_key(key: KeyCode, app: &mut AppState) -> bool {
     if app.search_active() {
@@ -66,6 +66,26 @@ pub(crate) fn handle_modal_event(
             }
             Ok(())
         }
+        ModalState::DescriptionEditor(state) => {
+            match key {
+                KeyCode::Esc => *modal = ModalState::TaskForm(state.parent.clone()),
+                KeyCode::F(2) => {
+                    let mut parent = state.parent.clone();
+                    parent.description = state.draft.clone();
+                    parent.field = TaskFormField::Description;
+                    parent.error = None;
+                    *modal = ModalState::TaskForm(parent);
+                }
+                KeyCode::Enter => state.draft.push('\n'),
+                KeyCode::Backspace => {
+                    state.draft.pop();
+                }
+                KeyCode::Tab => state.draft.push_str("    "),
+                KeyCode::Char(c) if !c.is_control() => state.draft.push(c),
+                _ => {}
+            }
+            Ok(())
+        }
         ModalState::TaskForm(form) => {
             match key {
                 KeyCode::Esc => *modal = ModalState::None,
@@ -76,6 +96,13 @@ pub(crate) fn handle_modal_event(
                 KeyCode::BackTab => {
                     form.field = prev_field(form.field);
                     form.error = None;
+                }
+                KeyCode::Enter if form.field == TaskFormField::Description => {
+                    let parent = form.clone();
+                    *modal = ModalState::DescriptionEditor(DescriptionEditorState {
+                        draft: parent.description.clone(),
+                        parent,
+                    });
                 }
                 KeyCode::Enter => {
                     let title = form.title.trim().to_string();
@@ -231,13 +258,29 @@ fn shift_days(day: NaiveDate, delta_days: i64) -> NaiveDate {
 mod tests {
     use chrono::NaiveDate;
     use crossterm::event::KeyCode;
-    use dayroll::app::AppState;
+    use dayroll::app::{AppState, UndoSlot};
+    use dayroll::model::Priority;
+    use dayroll::storage::Store;
 
-    use super::handle_search_key;
+    use crate::ui_state::{DescriptionEditorState, ModalState, TaskFormField, TaskFormState};
+
+    use super::{handle_modal_event, handle_search_key};
 
     fn date(year: i32, month: u32, day: u32) -> Result<NaiveDate, String> {
         NaiveDate::from_ymd_opt(year, month, day)
             .ok_or_else(|| format!("invalid date: {year:04}-{month:02}-{day:02}"))
+    }
+
+    fn task_form(day: NaiveDate) -> TaskFormState {
+        TaskFormState {
+            todo_id: None,
+            title: "draft title".to_string(),
+            priority: Priority::Medium,
+            date: day,
+            description: String::new(),
+            field: TaskFormField::Title,
+            error: None,
+        }
     }
 
     #[test]
@@ -257,6 +300,133 @@ mod tests {
         assert!(handle_search_key(KeyCode::Char('/'), &mut app));
         assert!(app.search_active());
         assert!(app.search_query().is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_quick_add_token_stays_in_form_and_sets_error() -> Result<(), String> {
+        let day = date(2026, 4, 18)?;
+        let store = Store::new_in_memory();
+        let mut undo_slot = UndoSlot::new();
+        let mut app = AppState::new_for_date(day);
+        let mut form = task_form(day);
+        form.title = "pay bill @2026-99-99".to_string();
+        let mut modal = ModalState::TaskForm(form);
+
+        handle_modal_event(KeyCode::Enter, &mut modal, &mut app, &store, &mut undo_slot)?;
+
+        match modal {
+            ModalState::TaskForm(form) => {
+                assert_eq!(form.title, "pay bill @2026-99-99");
+                assert!(form.error.is_some());
+            }
+            other => panic!("expected task form, got {other:?}"),
+        }
+        assert!(app.todos().is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn enter_on_description_field_opens_description_editor() -> Result<(), String> {
+        let day = date(2026, 4, 18)?;
+        let store = Store::new_in_memory();
+        let mut undo_slot = UndoSlot::new();
+        let mut app = AppState::new_for_date(day);
+        let mut form = task_form(day);
+        form.description = "# Notes\n- item".to_string();
+        form.field = TaskFormField::Description;
+        let mut modal = ModalState::TaskForm(form.clone());
+
+        handle_modal_event(KeyCode::Enter, &mut modal, &mut app, &store, &mut undo_slot)?;
+
+        match modal {
+            ModalState::DescriptionEditor(DescriptionEditorState { parent, draft }) => {
+                assert_eq!(parent.description, form.description);
+                assert_eq!(draft, form.description);
+            }
+            other => panic!("expected description editor, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn description_editor_save_updates_parent_form() -> Result<(), String> {
+        let day = date(2026, 4, 18)?;
+        let store = Store::new_in_memory();
+        let mut undo_slot = UndoSlot::new();
+        let mut app = AppState::new_for_date(day);
+        let parent = task_form(day);
+        let mut modal = ModalState::DescriptionEditor(DescriptionEditorState {
+            draft: "# Heading".to_string(),
+            parent,
+        });
+
+        handle_modal_event(KeyCode::Enter, &mut modal, &mut app, &store, &mut undo_slot)?;
+        handle_modal_event(
+            KeyCode::Char('-'),
+            &mut modal,
+            &mut app,
+            &store,
+            &mut undo_slot,
+        )?;
+        handle_modal_event(KeyCode::F(2), &mut modal, &mut app, &store, &mut undo_slot)?;
+
+        match modal {
+            ModalState::TaskForm(form) => {
+                assert_eq!(form.field, TaskFormField::Description);
+                assert_eq!(form.description, "# Heading\n-");
+                assert!(form.error.is_none());
+            }
+            other => panic!("expected task form, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn description_editor_escape_restores_parent_form_without_saving() -> Result<(), String> {
+        let day = date(2026, 4, 18)?;
+        let store = Store::new_in_memory();
+        let mut undo_slot = UndoSlot::new();
+        let mut app = AppState::new_for_date(day);
+        let mut parent = task_form(day);
+        parent.description = "kept".to_string();
+        parent.field = TaskFormField::Description;
+        let mut modal = ModalState::DescriptionEditor(DescriptionEditorState {
+            draft: "changed".to_string(),
+            parent,
+        });
+
+        handle_modal_event(KeyCode::Esc, &mut modal, &mut app, &store, &mut undo_slot)?;
+
+        match modal {
+            ModalState::TaskForm(form) => {
+                assert_eq!(form.field, TaskFormField::Description);
+                assert_eq!(form.description, "kept");
+            }
+            other => panic!("expected task form, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn enter_on_title_field_saves_task_instead_of_opening_notes() -> Result<(), String> {
+        let day = date(2026, 4, 18)?;
+        let store = Store::new_in_memory();
+        let mut undo_slot = UndoSlot::new();
+        let mut app = AppState::new_for_date(day);
+        let mut form = task_form(day);
+        form.title = "pay rent".to_string();
+        form.description = "# note".to_string();
+        form.field = TaskFormField::Title;
+        let mut modal = ModalState::TaskForm(form);
+
+        handle_modal_event(KeyCode::Enter, &mut modal, &mut app, &store, &mut undo_slot)?;
+
+        assert!(matches!(modal, ModalState::None));
+        assert_eq!(app.todos().len(), 1);
+        let todo = &app.todos()[0];
+        assert_eq!(todo.title, "pay rent");
+        assert_eq!(todo.description.as_deref(), Some("# note"));
         Ok(())
     }
 }

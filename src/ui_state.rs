@@ -39,9 +39,16 @@ pub(crate) struct MoveDateState {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct DescriptionEditorState {
+    pub(crate) parent: TaskFormState,
+    pub(crate) draft: String,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) enum ModalState {
     None,
     TaskForm(TaskFormState),
+    DescriptionEditor(DescriptionEditorState),
     MoveDate(MoveDateState),
 }
 

@@ -1,10 +1,11 @@
 use dayroll::app::Overlay;
 use dayroll::theme::Theme;
-use ratatui::layout::Rect;
+use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::text::{Line, Span, Text};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 
+use crate::markdown::render_markdown;
 use crate::ui_state::{ModalState, TaskFormField};
 
 use super::{border_style, chip_style};
@@ -107,9 +108,86 @@ pub(super) fn draw_modal(frame: &mut ratatui::Frame<'_>, modal: &ModalState, the
             );
             frame.render_widget(widget, area);
         }
+        ModalState::DescriptionEditor(state) => {
+            render_scrim(frame, theme);
+            let area = centered_rect(88, 78, 90, 22, frame.area());
+            frame.render_widget(Clear, area);
+
+            let outer = Block::default()
+                .title(" NOTES ")
+                .borders(Borders::ALL)
+                .border_style(border_style(theme))
+                .style(Style::default().bg(theme.panel));
+            let inner = outer.inner(area);
+            frame.render_widget(outer, area);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(2),
+                    Constraint::Min(8),
+                    Constraint::Length(4),
+                ])
+                .split(inner);
+            let panes = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .split(rows[1]);
+
+            let header = Paragraph::new(vec![Line::from(vec![
+                Span::styled(" editor ", chip_style(theme.bg, theme.accent)),
+                Span::raw(" raw markdown left, rendered preview right"),
+            ])])
+            .style(Style::default().fg(theme.text).bg(theme.panel));
+            frame.render_widget(header, rows[0]);
+
+            let editor = Paragraph::new(if state.draft.is_empty() {
+                Text::from(vec![Line::from(Span::styled(
+                    "<empty note>",
+                    Style::default().fg(theme.muted),
+                ))])
+            } else {
+                Text::from(state.draft.clone())
+            })
+            .style(Style::default().fg(theme.text).bg(theme.panel))
+            .wrap(Wrap { trim: false })
+            .block(
+                Block::default()
+                    .title(" RAW ")
+                    .borders(Borders::ALL)
+                    .border_style(border_style(theme)),
+            );
+            frame.render_widget(editor, panes[0]);
+
+            let preview = Paragraph::new(rendered_description_text(&state.draft, theme))
+                .style(Style::default().fg(theme.text).bg(theme.panel))
+                .wrap(Wrap { trim: false })
+                .block(
+                    Block::default()
+                        .title(" PREVIEW ")
+                        .borders(Borders::ALL)
+                        .border_style(border_style(theme)),
+                );
+            frame.render_widget(preview, panes[1]);
+
+            let footer = Paragraph::new(vec![
+                help_line("Enter", "newline", theme),
+                help_line("Tab", "insert spaces", theme),
+                help_line("F2", "apply to task form", theme),
+                help_line("Esc", "cancel", theme),
+            ])
+            .style(Style::default().fg(theme.text).bg(theme.panel));
+            frame.render_widget(
+                footer,
+                rows[2].inner(Margin {
+                    vertical: 0,
+                    horizontal: 0,
+                }),
+            );
+        }
         ModalState::TaskForm(form) => {
             render_scrim(frame, theme);
-            let area = centered_rect(72, 46, 64, 14, frame.area());
+            let area = centered_rect(72, 46, 64, 15, frame.area());
             frame.render_widget(Clear, area);
 
             let title_label = field_label_style(form.field == TaskFormField::Title, theme);
@@ -147,7 +225,8 @@ pub(super) fn draw_modal(frame: &mut ratatui::Frame<'_>, modal: &ModalState, the
                 ]),
                 Line::from(""),
                 help_line("Tab / Shift+Tab", "cycle field", theme),
-                help_line("Enter", "save", theme),
+                help_line("Enter", "save task / open notes", theme),
+                help_line("F2 in notes modal", "apply markdown draft", theme),
                 help_line("Esc", "cancel", theme),
             ];
 
@@ -208,6 +287,23 @@ fn help_header_line(theme: &Theme) -> Line<'static> {
     ])
 }
 
+fn rendered_description_text(description: &str, theme: &Theme) -> Text<'static> {
+    if description.trim().is_empty() {
+        return Text::from(vec![Line::from(Span::styled(
+            "markdown preview will appear here",
+            Style::default().fg(theme.muted),
+        ))]);
+    }
+
+    let mut rendered = render_markdown(description);
+    for line in &mut rendered.lines {
+        for span in &mut line.spans {
+            span.style = Style::default().fg(theme.text).patch(span.style);
+        }
+    }
+    rendered
+}
+
 fn description_preview(description: &str) -> String {
     if description.is_empty() {
         return "<empty>".to_string();
@@ -250,5 +346,146 @@ fn centered_rect(
         y,
         width: width.max(1),
         height: height.max(1),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::NaiveDate;
+    use dayroll::model::Priority;
+    use dayroll::theme::{ThemeName, theme_by_name};
+    use ratatui::{Terminal, backend::TestBackend};
+
+    use crate::ui_state::{DescriptionEditorState, ModalState, TaskFormField, TaskFormState};
+
+    use super::{draw_modal, rendered_description_text};
+
+    fn date(year: i32, month: u32, day: u32) -> Result<NaiveDate, String> {
+        NaiveDate::from_ymd_opt(year, month, day)
+            .ok_or_else(|| format!("invalid date: {year:04}-{month:02}-{day:02}"))
+    }
+
+    fn task_form(day: NaiveDate) -> TaskFormState {
+        TaskFormState {
+            todo_id: None,
+            title: "draft title".to_string(),
+            priority: Priority::Medium,
+            date: day,
+            description: String::new(),
+            field: TaskFormField::Title,
+            error: None,
+        }
+    }
+
+    fn render_modal_text(modal: &ModalState) -> Result<String, String> {
+        let backend = TestBackend::new(120, 36);
+        let mut terminal =
+            Terminal::new(backend).map_err(|error| format!("terminal init failed: {error}"))?;
+        let theme = theme_by_name(ThemeName::Dayroll);
+        terminal
+            .draw(|frame| draw_modal(frame, modal, &theme))
+            .map_err(|error| format!("render failed: {error}"))?;
+
+        let buffer = terminal.backend().buffer();
+        let width = usize::from(buffer.area.width);
+        let mut lines = Vec::new();
+        for row in buffer.content().chunks(width) {
+            let line = row
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>()
+                .trim_end()
+                .to_string();
+            lines.push(line);
+        }
+        Ok(lines.join("\n"))
+    }
+
+    #[test]
+    fn description_editor_modal_renders_titles_and_footer_help() -> Result<(), String> {
+        let modal = ModalState::DescriptionEditor(DescriptionEditorState {
+            parent: task_form(date(2026, 4, 18)?),
+            draft: "# Heading\n- item".to_string(),
+        });
+
+        let rendered = render_modal_text(&modal)?;
+
+        for needle in [
+            "NOTES",
+            "RAW",
+            "PREVIEW",
+            "Enter",
+            "newline",
+            "Tab",
+            "insert spaces",
+            "F2",
+            "apply to task form",
+            "Esc",
+            "cancel",
+        ] {
+            assert!(
+                rendered.contains(needle),
+                "missing {needle:?} in rendered modal:\n{rendered}"
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn description_editor_empty_state_renders_placeholders() -> Result<(), String> {
+        let modal = ModalState::DescriptionEditor(DescriptionEditorState {
+            parent: task_form(date(2026, 4, 18)?),
+            draft: String::new(),
+        });
+        let theme = theme_by_name(ThemeName::Dayroll);
+        let preview = rendered_description_text("", &theme);
+        let preview_text = preview
+            .lines
+            .iter()
+            .flat_map(|line| line.spans.iter())
+            .map(|span| span.content.as_ref())
+            .collect::<String>();
+        let rendered = render_modal_text(&modal)?;
+
+        assert!(rendered.contains("<empty note>"), "{rendered}");
+        assert!(preview_text.contains("markdown preview will appear here"));
+        assert!(
+            rendered.contains("markdown preview will appear here"),
+            "{rendered}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn description_editor_preview_renders_markdown_content() {
+        let theme = theme_by_name(ThemeName::Dayroll);
+        let rendered = rendered_description_text("# Heading\n- item\n**bold**", &theme);
+        let flattened = rendered
+            .lines
+            .iter()
+            .flat_map(|line| line.spans.iter())
+            .map(|span| span.content.as_ref())
+            .collect::<String>();
+
+        assert!(flattened.contains("Heading"), "{flattened}");
+        assert!(
+            flattened.contains("• item") || flattened.contains("- item"),
+            "{flattened}"
+        );
+        assert!(flattened.contains("bold"), "{flattened}");
+    }
+
+    #[test]
+    fn task_form_modal_renders_updated_notes_help_text() -> Result<(), String> {
+        let mut form = task_form(date(2026, 4, 18)?);
+        form.field = TaskFormField::Description;
+        let modal = ModalState::TaskForm(form);
+
+        let rendered = render_modal_text(&modal)?;
+
+        assert!(rendered.contains("save task / open notes"), "{rendered}");
+        assert!(rendered.contains("apply markdown draft"), "{rendered}");
+        Ok(())
     }
 }
