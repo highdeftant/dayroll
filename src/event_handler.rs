@@ -98,7 +98,13 @@ pub(crate) fn handle_modal_event(
                             description,
                         )?;
                     } else {
-                        let parsed = parse_quick_add(&title, form.priority, form.date)?;
+                        let parsed = match parse_quick_add(&title, form.priority, form.date) {
+                            Ok(parsed) => parsed,
+                            Err(error) => {
+                                form.error = Some(error);
+                                return Ok(());
+                            }
+                        };
                         let description = if form.description.trim().is_empty() {
                             None
                         } else {
