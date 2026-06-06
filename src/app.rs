@@ -582,6 +582,11 @@ pub fn parse_quick_add(
         }
 
         if let Some(date_token) = token.strip_prefix('@') {
+            if date_token.is_empty() {
+                title_tokens.push(token.to_string());
+                continue;
+            }
+
             assigned_day = parse_date_token(date_token, default_day)?;
             continue;
         }

@@ -370,3 +370,13 @@ fn quick_add_rejects_bad_date_token() -> Result<(), String> {
     assert!(err.is_err());
     Ok(())
 }
+
+#[test]
+fn quick_add_treats_bare_at_token_as_literal_title_text() -> Result<(), String> {
+    let default_day = date(2026, 4, 18)?;
+    let parsed = dayroll::app::parse_quick_add("call mom @ 2pm", Priority::Medium, default_day)?;
+    assert_eq!(parsed.title, "call mom @ 2pm");
+    assert_eq!(parsed.priority, Priority::Medium);
+    assert_eq!(parsed.assigned_day, default_day);
+    Ok(())
+}
