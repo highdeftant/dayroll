@@ -357,9 +357,15 @@ impl AppState {
 
 impl DayBuckets {
     pub fn for_day(day: NaiveDate, todos: &[Todo]) -> Self {
+        Self::for_day_as_of(day, day, todos)
+    }
+
+    pub fn for_day_as_of(day: NaiveDate, as_of: NaiveDate, todos: &[Todo]) -> Self {
+        let overdue_cutoff = std::cmp::min(day, as_of);
+
         let overdue = todos
             .iter()
-            .filter(|todo| todo.status == Status::Pending && todo.assigned_day < day)
+            .filter(|todo| todo.status == Status::Pending && todo.assigned_day < overdue_cutoff)
             .cloned()
             .collect::<Vec<_>>();
 

@@ -32,6 +32,51 @@ fn day_view_separates_overdue_and_today() -> Result<(), String> {
 }
 
 #[test]
+fn overdue_bucket_is_based_on_actual_day_when_viewing_a_future_day() -> Result<(), String> {
+    let selected_day = date(2026, 4, 19)?;
+    let actual_day = date(2026, 4, 18)?;
+
+    let past = Todo::new("late", Priority::High, date(2026, 4, 17)?);
+    let today = Todo::new("current", Priority::Medium, actual_day);
+    let future = Todo::new("future", Priority::Low, selected_day);
+
+    let buckets = DayBuckets::for_day_as_of(
+        selected_day,
+        actual_day,
+        &[past.clone(), today.clone(), future.clone()],
+    );
+
+    assert_eq!(buckets.overdue.len(), 1);
+    assert_eq!(buckets.today.len(), 1);
+    assert_eq!(buckets.overdue[0].title, past.title);
+    assert_eq!(buckets.today[0].title, future.title);
+
+    let still_current = buckets.overdue.iter().any(|todo| todo.title == "current");
+    assert!(
+        !still_current,
+        "current-day todo should not be overdue while viewed day is in future"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn search_filter_keeps_overdue_tasks_out_of_today_bucket() -> Result<(), String> {
+    let today = date(2026, 4, 18)?;
+    let overdue = Todo::new("alpha late", Priority::High, date(2026, 4, 17)?);
+    let current = Todo::new("beta now", Priority::Medium, today);
+
+    let buckets = DayBuckets::for_day(today, &[overdue.clone(), current.clone()]);
+    let filtered = buckets.filter_by_query("beta");
+
+    assert_eq!(filtered.overdue.len(), 0);
+    assert_eq!(filtered.today.len(), 1);
+    assert_eq!(filtered.today[0].title, current.title);
+
+    Ok(())
+}
+
+#[test]
 fn move_todo_to_another_day_changes_assigned_day() -> Result<(), String> {
     let original = date(2026, 4, 18)?;
     let target = date(2026, 4, 22)?;

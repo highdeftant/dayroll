@@ -32,7 +32,11 @@ pub(super) fn priority_chip(priority: Priority, theme: &Theme) -> (&'static str,
 }
 
 pub(crate) fn visible_todos(app: &AppState) -> Vec<VisibleTodo> {
-    let buckets = DayBuckets::for_day(app.selected_day(), app.todos());
+    let buckets = DayBuckets::for_day_as_of(
+        app.selected_day(),
+        chrono::Local::now().date_naive(),
+        app.todos(),
+    );
     let filtered = buckets.filter_by_query(app.search_query());
     let mut rows = Vec::new();
 
