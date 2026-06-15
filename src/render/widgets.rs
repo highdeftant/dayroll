@@ -6,7 +6,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
-    Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+    Block, BorderType, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -62,12 +62,12 @@ pub(super) fn build_nested_tasks_widget(input: TasksWidgetInput<'_>) -> NestedTa
 
     let search_chip = if !search_active {
         (
-            " FILTER idle ",
+            " filter: idle ",
             chip_style(theme.muted, Color::Rgb(55, 66, 78)),
         )
     } else {
         (
-            " FILTER active ",
+            " filter: active ",
             chip_style(theme.text, Color::Rgb(55, 80, 109)),
         )
     };
@@ -76,11 +76,8 @@ pub(super) fn build_nested_tasks_widget(input: TasksWidgetInput<'_>) -> NestedTa
 
     let outer = Block::default()
         .title(Line::from(vec![Span::styled(
-            " 日録 // DAYROLL ",
-            Style::default()
-                .fg(theme.info)
-                .add_modifier(Modifier::BOLD)
-                .add_modifier(Modifier::ITALIC),
+            " DAYROLL ",
+            Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
         )]))
         .title_top(
             Line::from(Span::styled(
@@ -105,6 +102,7 @@ pub(super) fn build_nested_tasks_widget(input: TasksWidgetInput<'_>) -> NestedTa
             .right_aligned(),
         )
         .borders(Borders::ALL)
+        .border_type(BorderType::Thick)
         .border_style(border_style(theme));
 
     let inner = outer.inner(area).inner(Margin {
@@ -246,9 +244,9 @@ fn draw_section_panel(
 
             let node_glyph = if row.description.is_some() {
                 if expanded_task == Some(row.id) {
-                    "▾ "
+                    "- "
                 } else {
-                    "▸ "
+                    "+ "
                 }
             } else {
                 "  "
@@ -271,7 +269,7 @@ fn draw_section_panel(
 
             let prio = priority_chip(row.priority, theme);
             let mut row_spans = vec![
-                Span::styled(if selected { "▶ " } else { "  " }, marker_style),
+                Span::styled(if selected { "> " } else { "  " }, marker_style),
                 Span::styled(node_glyph, Style::default().fg(theme.info)),
                 Span::styled("●", status_dot_style),
                 Span::raw(" "),
@@ -289,7 +287,7 @@ fn draw_section_panel(
                         .map(|line| line.spans.clone())
                         .unwrap_or_else(|| vec![Span::raw(description.clone())]);
                     let mut detail_spans =
-                        vec![Span::styled("   └─ ", Style::default().fg(theme.muted))];
+                        vec![Span::styled("   |- ", Style::default().fg(theme.muted))];
                     for mut span in detail {
                         span.style = Style::default()
                             .fg(theme.muted)
@@ -327,6 +325,7 @@ fn draw_section_panel(
                         .unwrap_or_else(|| Line::from("")),
                 )
                 .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
                 .border_style(border_style(theme)),
         );
 
@@ -418,6 +417,7 @@ fn draw_calendar_panel(selected_day: NaiveDate, theme: &Theme) -> Paragraph<'sta
             Block::default()
                 .title(" Calendar ")
                 .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
                 .border_style(border_style(theme)),
         )
 }
