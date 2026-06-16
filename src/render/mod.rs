@@ -1,6 +1,7 @@
+use chrono::{NaiveDate, NaiveTime};
 use dayroll::app::{AppState, DayBuckets, footer_hint};
 use dayroll::model::Priority;
-use dayroll::theme::{Theme, theme_by_name};
+use dayroll::theme::{theme_by_name, Theme};
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -23,6 +24,21 @@ pub(super) fn chip_style(fg: Color, bg: Color) -> Style {
     Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD)
 }
 
+fn format_due_time_label(title: &str, due_time: Option<NaiveTime>) -> String {
+    due_time.map_or_else(
+        || title.to_string(),
+        |time| format!("{} ({})", title, time.format("%H:%M")),
+    )
+}
+
+fn format_overdue_label(title: &str, assigned_day: NaiveDate, due_time: Option<NaiveTime>) -> String {
+    let mut parts = vec![assigned_day.to_string()];
+    if let Some(time) = due_time {
+        parts.push(time.format("%H:%M").to_string());
+    }
+    format!("{title} ({})", parts.join(" "))
+}
+
 pub(super) fn priority_chip(priority: Priority, theme: &Theme) -> (&'static str, Style) {
     match priority {
         Priority::High => (" P1 ", chip_style(theme.text, Color::Rgb(118, 72, 38))),
@@ -43,7 +59,7 @@ pub(crate) fn visible_todos(app: &AppState) -> Vec<VisibleTodo> {
     for todo in &filtered.overdue {
         rows.push(VisibleTodo {
             id: todo.id,
-            label: format!("{} ({})", todo.title, todo.assigned_day),
+            label: format_overdue_label(&todo.title, todo.assigned_day, todo.due_time),
             description: todo.description.clone(),
             overdue: true,
             status: todo.status,
@@ -54,7 +70,7 @@ pub(crate) fn visible_todos(app: &AppState) -> Vec<VisibleTodo> {
     for todo in &filtered.today {
         rows.push(VisibleTodo {
             id: todo.id,
-            label: todo.title.clone(),
+            label: format_due_time_label(&todo.title, todo.due_time),
             description: todo.description.clone(),
             overdue: false,
             status: todo.status,

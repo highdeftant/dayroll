@@ -112,6 +112,13 @@ pub(crate) fn handle_modal_event(
                     }
 
                     if let Some(id) = form.todo_id {
+                        let parsed = match parse_quick_add(&title, form.priority, form.date) {
+                            Ok(parsed) => parsed,
+                            Err(error) => {
+                                form.error = Some(error);
+                                return Ok(());
+                            }
+                        };
                         let description = if form.description.trim().is_empty() {
                             None
                         } else {
@@ -119,10 +126,11 @@ pub(crate) fn handle_modal_event(
                         };
                         app.update_todo_with_description(
                             id,
-                            title,
-                            form.priority,
-                            form.date,
+                            parsed.title,
+                            parsed.priority,
+                            parsed.assigned_day,
                             description,
+                            parsed.due_time,
                         )?;
                     } else {
                         let parsed = match parse_quick_add(&title, form.priority, form.date) {
@@ -142,6 +150,7 @@ pub(crate) fn handle_modal_event(
                             parsed.priority,
                             parsed.assigned_day,
                             description,
+                            parsed.due_time,
                         );
                     }
 

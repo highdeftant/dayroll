@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use chrono::{Datelike, Days, NaiveDate};
+use chrono::{Datelike, Days, NaiveDate, NaiveTime};
 use uuid::Uuid;
 
 use crate::model::{Priority, Status, Todo};
@@ -90,6 +90,7 @@ pub struct QuickAddParsed {
     pub title: String,
     pub priority: Priority,
     pub assigned_day: NaiveDate,
+    pub due_time: Option<NaiveTime>,
 }
 
 impl AppState {
@@ -160,7 +161,7 @@ impl AppState {
         priority: Priority,
         assigned_day: NaiveDate,
     ) -> Uuid {
-        self.add_todo_with_description(title, priority, assigned_day, None)
+        self.add_todo_with_description(title, priority, assigned_day, None, None)
     }
 
     pub fn add_todo_with_description(
@@ -169,8 +170,10 @@ impl AppState {
         priority: Priority,
         assigned_day: NaiveDate,
         description: Option<String>,
+        due_time: Option<NaiveTime>,
     ) -> Uuid {
-        let mut todo = Todo::new(title, priority, assigned_day);
+        let mut todo = Todo::new(title, priority, assigned_day)
+            .with_due_time(due_time);
         if let Some(description_text) = description {
             todo = todo.with_description(description_text);
         }
@@ -292,7 +295,7 @@ impl AppState {
         priority: Priority,
         assigned_day: NaiveDate,
     ) -> Result<(), String> {
-        self.update_todo_with_description(id, title, priority, assigned_day, None)
+        self.update_todo_with_description(id, title, priority, assigned_day, None, None)
     }
 
     pub fn update_todo_with_description(
@@ -302,6 +305,7 @@ impl AppState {
         priority: Priority,
         assigned_day: NaiveDate,
         description: Option<String>,
+        due_time: Option<NaiveTime>,
     ) -> Result<(), String> {
         let todo = self
             .todos
@@ -312,6 +316,7 @@ impl AppState {
         todo.title = title;
         todo.priority = priority;
         todo.assigned_day = assigned_day;
+        todo.due_time = due_time;
         todo.description = description.and_then(|value| {
             if value.trim().is_empty() {
                 None
@@ -578,6 +583,7 @@ pub fn parse_quick_add(
 ) -> Result<QuickAddParsed, String> {
     let mut priority = default_priority;
     let mut assigned_day = default_day;
+    let mut due_time = None;
     let mut title_tokens = Vec::<String>::new();
 
     for token in input.split_whitespace() {
@@ -587,13 +593,31 @@ pub fn parse_quick_add(
             continue;
         }
 
-        if let Some(date_token) = token.strip_prefix('@') {
-            if date_token.is_empty() {
+        if let Some(token_body) = token.strip_prefix('@') {
+            if token_body.is_empty() {
                 title_tokens.push(token.to_string());
                 continue;
             }
 
-            assigned_day = parse_date_token(date_token, default_day)?;
+            if let Ok(parsed_time) = parse_time_token(token_body) {
+                due_time = Some(parsed_time);
+                continue;
+            }
+
+            if let Ok(parsed_date) = try_parse_date_token(token_body, default_day) {
+                assigned_day = parsed_date;
+                continue;
+            }
+
+            if appears_to_be_time_like(token_body) {
+                return Err(format!("invalid time token: @{token}"));
+            }
+
+            if appears_to_be_date_like(token_body) {
+                return Err(format!("invalid date token: @{token}"));
+            }
+
+            title_tokens.push(token.to_string());
             continue;
         }
 
@@ -609,7 +633,22 @@ pub fn parse_quick_add(
         title,
         priority,
         assigned_day,
+        due_time,
     })
+}
+
+fn parse_time_token(token: &str) -> Result<NaiveTime, String> {
+    NaiveTime::parse_from_str(token, "%H:%M")
+        .or_else(|_| NaiveTime::parse_from_str(token, "%-H:%M"))
+        .map_err(|_| format!("invalid time token: @{token}"))
+}
+
+fn appears_to_be_time_like(token: &str) -> bool {
+    token.contains(':') && token.len() >= 3
+}
+
+fn appears_to_be_date_like(token: &str) -> bool {
+    token.contains('-')
 }
 
 fn parse_priority_token(token: &str) -> Option<Priority> {
@@ -621,15 +660,16 @@ fn parse_priority_token(token: &str) -> Option<Priority> {
     }
 }
 
-fn parse_date_token(token: &str, base_day: NaiveDate) -> Result<NaiveDate, String> {
+fn try_parse_date_token(token: &str, base_day: NaiveDate) -> Result<NaiveDate, String> {
     let normalized = token.to_ascii_lowercase();
     match normalized.as_str() {
         "today" => Ok(base_day),
         "tomorrow" => base_day
             .checked_add_days(Days::new(1))
             .ok_or_else(|| format!("failed to compute tomorrow from {base_day}")),
-        _ => NaiveDate::parse_from_str(token, "%Y-%m-%d")
-            .map_err(|_| format!("invalid date token: @{token}")),
+        _ => NaiveDate::parse_from_str(token, "%Y-%m-%d").map_err(|_| {
+            format!("invalid date token: @{token}")
+        }),
     }
 }
 

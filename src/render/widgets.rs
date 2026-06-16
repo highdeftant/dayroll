@@ -76,8 +76,11 @@ pub(super) fn build_nested_tasks_widget(input: TasksWidgetInput<'_>) -> NestedTa
 
     let outer = Block::default()
         .title(Line::from(vec![Span::styled(
-            " DAYROLL ",
-            Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+            " 日録 // DAYROLL ",
+            Style::default()
+                .fg(theme.info)
+                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::ITALIC),
         )]))
         .title_top(
             Line::from(Span::styled(

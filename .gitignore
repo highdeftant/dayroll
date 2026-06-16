@@ -1,1 +1,10 @@
+NEXT_STEPS.md
 /target
+
+# Dayroll local runtime data (never commit personal tasks)
+/.dayroll/
+**/.dayroll/
+**/todos.json
+
+# Local app config/state
+/.config/dayroll/

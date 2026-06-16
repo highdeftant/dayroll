@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -25,6 +25,7 @@ pub struct Todo {
     pub created_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
     pub description: Option<String>, // Markdown description
+    pub due_time: Option<NaiveTime>,
 }
 
 impl Todo {
@@ -38,6 +39,7 @@ impl Todo {
             created_at: Utc::now(),
             completed_at: None,
             description: None,
+            due_time: None,
         }
     }
 
@@ -48,6 +50,11 @@ impl Todo {
         } else {
             self.description = Some(desc);
         }
+        self
+    }
+
+    pub fn with_due_time(mut self, due_time: Option<NaiveTime>) -> Self {
+        self.due_time = due_time;
         self
     }
 }
