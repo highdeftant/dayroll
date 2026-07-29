@@ -1,7 +1,7 @@
 use chrono::{NaiveDate, NaiveTime};
-use dayroll::app::{AppState, DayBuckets, footer_hint};
-use dayroll::model::Priority;
-use dayroll::theme::{theme_by_name, Theme};
+use dayroll::app::{AppState, board_todos, footer_hint};
+use dayroll::model::{Area, Priority};
+use dayroll::theme::{Theme, theme_by_name};
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -24,19 +24,41 @@ pub(super) fn chip_style(fg: Color, bg: Color) -> Style {
     Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD)
 }
 
-fn format_due_time_label(title: &str, due_time: Option<NaiveTime>) -> String {
-    due_time.map_or_else(
-        || title.to_string(),
-        |time| format!("{} ({})", title, time.format("%H:%M")),
-    )
+fn format_task_label(title: &str, assigned_day: NaiveDate, due_time: Option<NaiveTime>) -> String {
+    let date = match due_time {
+        Some(time) => format!("{} {}", assigned_day, time.format("%H:%M")),
+        None => assigned_day.to_string(),
+    };
+    format!("{title} ({date})")
 }
 
-fn format_overdue_label(title: &str, assigned_day: NaiveDate, due_time: Option<NaiveTime>) -> String {
-    let mut parts = vec![assigned_day.to_string()];
-    if let Some(time) = due_time {
-        parts.push(time.format("%H:%M").to_string());
+fn format_area_chip(area: Area) -> (&'static str, Style) {
+    match area {
+        Area::Projects => (
+            " projects ",
+            chip_style(Color::Rgb(224, 184, 91), Color::Rgb(42, 44, 50)),
+        ),
+        Area::Home => (
+            " home ",
+            chip_style(Color::Rgb(138, 186, 255), Color::Rgb(42, 44, 50)),
+        ),
+        Area::Admin => (
+            " admin ",
+            chip_style(Color::Rgb(177, 140, 255), Color::Rgb(42, 44, 50)),
+        ),
+        Area::Personal => (
+            " personal ",
+            chip_style(Color::Rgb(122, 201, 172), Color::Rgb(42, 44, 50)),
+        ),
+        Area::Waiting => (
+            " waiting ",
+            chip_style(Color::Rgb(248, 177, 122), Color::Rgb(42, 44, 50)),
+        ),
+        Area::Inbox => (
+            " inbox ",
+            chip_style(Color::Rgb(175, 175, 175), Color::Rgb(42, 44, 50)),
+        ),
     }
-    format!("{title} ({})", parts.join(" "))
 }
 
 pub(super) fn priority_chip(priority: Priority, theme: &Theme) -> (&'static str, Style) {
@@ -48,31 +70,14 @@ pub(super) fn priority_chip(priority: Priority, theme: &Theme) -> (&'static str,
 }
 
 pub(crate) fn visible_todos(app: &AppState) -> Vec<VisibleTodo> {
-    let buckets = DayBuckets::for_day_as_of(
-        app.selected_day(),
-        chrono::Local::now().date_naive(),
-        app.todos(),
-    );
-    let filtered = buckets.filter_by_query(app.search_query());
     let mut rows = Vec::new();
 
-    for todo in &filtered.overdue {
+    for todo in board_todos(app.todos(), app.search_query()) {
         rows.push(VisibleTodo {
             id: todo.id,
-            label: format_overdue_label(&todo.title, todo.assigned_day, todo.due_time),
+            label: format_task_label(&todo.title, todo.assigned_day, todo.due_time),
             description: todo.description.clone(),
-            overdue: true,
-            status: todo.status,
-            priority: todo.priority,
-        });
-    }
-
-    for todo in &filtered.today {
-        rows.push(VisibleTodo {
-            id: todo.id,
-            label: format_due_time_label(&todo.title, todo.due_time),
-            description: todo.description.clone(),
-            overdue: false,
+            area: todo.area,
             status: todo.status,
             priority: todo.priority,
         });
@@ -130,13 +135,21 @@ pub(crate) fn draw_ui(
     );
 
     frame.render_widget(tasks.outer, layout[0]);
-    frame.render_widget(tasks.today, tasks.today_area);
-    frame.render_widget(tasks.overdue, tasks.overdue_area);
+    frame.render_widget(tasks.backlog, tasks.backlog_area);
+    frame.render_widget(tasks.doing, tasks.doing_area);
+    frame.render_widget(tasks.blocked, tasks.blocked_area);
+    frame.render_widget(tasks.done, tasks.done_area);
     frame.render_widget(tasks.calendar, tasks.calendar_area);
-    if let Some((scrollbar, mut state, area)) = tasks.today_scrollbar {
+    if let Some((scrollbar, mut state, area)) = tasks.backlog_scrollbar {
         frame.render_stateful_widget(scrollbar, area, &mut state);
     }
-    if let Some((scrollbar, mut state, area)) = tasks.overdue_scrollbar {
+    if let Some((scrollbar, mut state, area)) = tasks.doing_scrollbar {
+        frame.render_stateful_widget(scrollbar, area, &mut state);
+    }
+    if let Some((scrollbar, mut state, area)) = tasks.blocked_scrollbar {
+        frame.render_stateful_widget(scrollbar, area, &mut state);
+    }
+    if let Some((scrollbar, mut state, area)) = tasks.done_scrollbar {
         frame.render_stateful_widget(scrollbar, area, &mut state);
     }
     frame.render_widget(status, layout[1]);

@@ -14,7 +14,7 @@ use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use dayroll::app::{AppState, Overlay, UndoSlot, request_quit_overlay, toggle_help_overlay};
-use dayroll::model::Priority;
+use dayroll::model::{Priority, Status};
 use dayroll::storage::{Store, TodoStore};
 use dayroll::theme::{AppConfig, load_config, save_config};
 use ratatui::Terminal;
@@ -185,6 +185,30 @@ fn run_app() -> Result<(), String> {
                             todo_id: todo.id,
                             date: todo.assigned_day,
                         });
+                    }
+                }
+                KeyCode::Char('1') => {
+                    if let Some(row) = visible_rows.get(selected_index) {
+                        undo_slot.record(app.set_status_with_undo(row.id, Status::Backlog)?);
+                        store.save(app.todos())?;
+                    }
+                }
+                KeyCode::Char('2') => {
+                    if let Some(row) = visible_rows.get(selected_index) {
+                        undo_slot.record(app.set_status_with_undo(row.id, Status::Doing)?);
+                        store.save(app.todos())?;
+                    }
+                }
+                KeyCode::Char('3') => {
+                    if let Some(row) = visible_rows.get(selected_index) {
+                        undo_slot.record(app.set_status_with_undo(row.id, Status::Blocked)?);
+                        store.save(app.todos())?;
+                    }
+                }
+                KeyCode::Char('4') => {
+                    if let Some(row) = visible_rows.get(selected_index) {
+                        undo_slot.record(app.set_status_with_undo(row.id, Status::Done)?);
+                        store.save(app.todos())?;
                     }
                 }
                 KeyCode::Char('u') => {

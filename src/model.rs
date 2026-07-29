@@ -9,9 +9,23 @@ pub enum Priority {
     Low,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum Area {
+    Projects,
+    Home,
+    Admin,
+    Personal,
+    Waiting,
+    #[default]
+    Inbox,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Status {
-    Pending,
+    #[serde(alias = "Pending")]
+    Backlog,
+    Doing,
+    Blocked,
     Done,
 }
 
@@ -19,6 +33,8 @@ pub enum Status {
 pub struct Todo {
     pub id: Uuid,
     pub title: String,
+    #[serde(default)]
+    pub area: Area,
     pub status: Status,
     pub priority: Priority,
     pub assigned_day: NaiveDate,
@@ -33,7 +49,8 @@ impl Todo {
         Self {
             id: Uuid::new_v4(),
             title: title.into(),
-            status: Status::Pending,
+            area: Area::default(),
+            status: Status::Backlog,
             priority,
             assigned_day,
             created_at: Utc::now(),
@@ -50,6 +67,11 @@ impl Todo {
         } else {
             self.description = Some(desc);
         }
+        self
+    }
+
+    pub fn with_area(mut self, area: Area) -> Self {
+        self.area = area;
         self
     }
 

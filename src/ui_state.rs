@@ -1,6 +1,6 @@
 use chrono::NaiveDate;
 use dayroll::app::Overlay;
-use dayroll::model::{Priority, Status};
+use dayroll::model::{Area, Priority, Status};
 use dayroll::theme::ThemeName;
 
 #[derive(Debug, Clone)]
@@ -8,7 +8,7 @@ pub(crate) struct VisibleTodo {
     pub(crate) id: uuid::Uuid,
     pub(crate) label: String,
     pub(crate) description: Option<String>,
-    pub(crate) overdue: bool,
+    pub(crate) area: Area,
     pub(crate) status: Status,
     pub(crate) priority: Priority,
 }

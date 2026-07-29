@@ -13,18 +13,24 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::markdown::render_markdown;
 use crate::ui_state::VisibleTodo;
 
-use super::{border_style, chip_style, priority_chip};
+use super::{border_style, chip_style, format_area_chip, priority_chip};
 
 pub(super) struct NestedTasksWidget<'a> {
     pub(super) outer: Block<'a>,
-    pub(super) today: Paragraph<'a>,
-    pub(super) today_area: Rect,
-    pub(super) overdue: Paragraph<'a>,
-    pub(super) overdue_area: Rect,
+    pub(super) backlog: Paragraph<'a>,
+    pub(super) backlog_area: Rect,
+    pub(super) doing: Paragraph<'a>,
+    pub(super) doing_area: Rect,
+    pub(super) blocked: Paragraph<'a>,
+    pub(super) blocked_area: Rect,
+    pub(super) done: Paragraph<'a>,
+    pub(super) done_area: Rect,
     pub(super) calendar: Paragraph<'a>,
     pub(super) calendar_area: Rect,
-    pub(super) today_scrollbar: Option<(Scrollbar<'a>, ScrollbarState, Rect)>,
-    pub(super) overdue_scrollbar: Option<(Scrollbar<'a>, ScrollbarState, Rect)>,
+    pub(super) backlog_scrollbar: Option<(Scrollbar<'a>, ScrollbarState, Rect)>,
+    pub(super) doing_scrollbar: Option<(Scrollbar<'a>, ScrollbarState, Rect)>,
+    pub(super) blocked_scrollbar: Option<(Scrollbar<'a>, ScrollbarState, Rect)>,
+    pub(super) done_scrollbar: Option<(Scrollbar<'a>, ScrollbarState, Rect)>,
 }
 
 pub(super) struct TasksWidgetInput<'a> {
@@ -53,12 +59,26 @@ pub(super) fn build_nested_tasks_widget(input: TasksWidgetInput<'_>) -> NestedTa
     } = input;
 
     let current_day = Local::now().date_naive();
-    let overdue_count = visible_rows.iter().filter(|row| row.overdue).count();
-    let done = visible_rows
+    let backlog_rows: Vec<(usize, &VisibleTodo)> = visible_rows
         .iter()
-        .filter(|row| row.status == Status::Done)
-        .count();
-    let pending = visible_rows.len().saturating_sub(done);
+        .enumerate()
+        .filter(|(_, row)| row.status == Status::Backlog)
+        .collect();
+    let doing_rows: Vec<(usize, &VisibleTodo)> = visible_rows
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| row.status == Status::Doing)
+        .collect();
+    let blocked_rows: Vec<(usize, &VisibleTodo)> = visible_rows
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| row.status == Status::Blocked)
+        .collect();
+    let done_rows: Vec<(usize, &VisibleTodo)> = visible_rows
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| row.status == Status::Done)
+        .collect();
 
     let search_chip = if !search_active {
         (
@@ -113,39 +133,29 @@ pub(super) fn build_nested_tasks_widget(input: TasksWidgetInput<'_>) -> NestedTa
         horizontal: 1,
     });
 
-    let horizontal = if inner.width >= 80 {
-        Layout::default()
+    let (board_area, calendar_area, board_direction) = if inner.width >= 120 {
+        let split = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
-            .split(inner)
+            .constraints([Constraint::Percentage(75), Constraint::Percentage(25)])
+            .split(inner);
+        (split[0], split[1], Direction::Horizontal)
     } else {
-        Layout::default()
+        let split = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(12), Constraint::Length(10)])
-            .split(inner)
+            .constraints([Constraint::Min(14), Constraint::Length(10)])
+            .split(inner);
+        (split[0], split[1], Direction::Vertical)
     };
 
-    let queue_area = horizontal[0];
-    let calendar_area = horizontal[1];
-
-    let queue_split = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
-        .split(queue_area);
-
-    let today_area = queue_split[0];
-    let overdue_area = queue_split[1];
-
-    let today_rows: Vec<(usize, &VisibleTodo)> = visible_rows
-        .iter()
-        .enumerate()
-        .filter(|(_, row)| !row.overdue)
-        .collect();
-    let overdue_rows: Vec<(usize, &VisibleTodo)> = visible_rows
-        .iter()
-        .enumerate()
-        .filter(|(_, row)| row.overdue)
-        .collect();
+    let lane_split = Layout::default()
+        .direction(board_direction)
+        .constraints([
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+        ])
+        .split(board_area);
 
     let empty_message = if search_active {
         "search active"
@@ -153,27 +163,44 @@ pub(super) fn build_nested_tasks_widget(input: TasksWidgetInput<'_>) -> NestedTa
         "no tasks"
     };
 
-    let (today, today_scrollbar) = draw_section_panel(
-        today_area,
-        " Tasks ",
-        &today_rows,
+    let (backlog, backlog_scrollbar) = draw_section_panel(
+        lane_split[0],
+        " Backlog ",
+        &backlog_rows,
         selected_index,
         expanded_task,
         empty_message,
-        Some(format!(
-            " todo:{} done:{} overdue:{} ",
-            pending, done, overdue_count
-        )),
+        Some(format!(" {} ", backlog_rows.len())),
         theme,
     );
-    let (overdue, overdue_scrollbar) = draw_section_panel(
-        overdue_area,
-        " Overdue ",
-        &overdue_rows,
+    let (doing, doing_scrollbar) = draw_section_panel(
+        lane_split[1],
+        " Doing ",
+        &doing_rows,
         selected_index,
         expanded_task,
         empty_message,
-        None,
+        Some(format!(" {} ", doing_rows.len())),
+        theme,
+    );
+    let (blocked, blocked_scrollbar) = draw_section_panel(
+        lane_split[2],
+        " Blocked ",
+        &blocked_rows,
+        selected_index,
+        expanded_task,
+        empty_message,
+        Some(format!(" {} ", blocked_rows.len())),
+        theme,
+    );
+    let (done, done_scrollbar) = draw_section_panel(
+        lane_split[3],
+        " Done ",
+        &done_rows,
+        selected_index,
+        expanded_task,
+        empty_message,
+        Some(format!(" {} ", done_rows.len())),
         theme,
     );
 
@@ -181,14 +208,20 @@ pub(super) fn build_nested_tasks_widget(input: TasksWidgetInput<'_>) -> NestedTa
 
     NestedTasksWidget {
         outer,
-        today,
-        today_area,
-        overdue,
-        overdue_area,
+        backlog,
+        backlog_area: lane_split[0],
+        doing,
+        doing_area: lane_split[1],
+        blocked,
+        blocked_area: lane_split[2],
+        done,
+        done_area: lane_split[3],
         calendar,
         calendar_area,
-        today_scrollbar,
-        overdue_scrollbar,
+        backlog_scrollbar,
+        doing_scrollbar,
+        blocked_scrollbar,
+        done_scrollbar,
     }
 }
 
@@ -231,18 +264,19 @@ fn draw_section_panel(
                 Style::default().fg(theme.muted)
             };
 
-            let status_dot_style = match row.overdue {
-                true => Style::default()
+            let status_dot_style = match row.status {
+                Status::Backlog => Style::default()
+                    .fg(pulsing_dot_color(theme.warn))
+                    .add_modifier(Modifier::BOLD),
+                Status::Doing => Style::default()
+                    .fg(pulsing_dot_color(theme.info))
+                    .add_modifier(Modifier::BOLD),
+                Status::Blocked => Style::default()
                     .fg(pulsing_dot_color(theme.danger))
                     .add_modifier(Modifier::BOLD),
-                false => match row.status {
-                    Status::Done => Style::default()
-                        .fg(pulsing_dot_color(theme.ok))
-                        .add_modifier(Modifier::BOLD),
-                    Status::Pending => Style::default()
-                        .fg(pulsing_dot_color(theme.warn))
-                        .add_modifier(Modifier::BOLD),
-                },
+                Status::Done => Style::default()
+                    .fg(pulsing_dot_color(theme.ok))
+                    .add_modifier(Modifier::BOLD),
             };
 
             let node_glyph = if row.description.is_some() {
@@ -271,12 +305,15 @@ fn draw_section_panel(
             }
 
             let prio = priority_chip(row.priority, theme);
+            let area = format_area_chip(row.area);
             let mut row_spans = vec![
                 Span::styled(if selected { "> " } else { "  " }, marker_style),
                 Span::styled(node_glyph, Style::default().fg(theme.info)),
                 Span::styled("●", status_dot_style),
                 Span::raw(" "),
                 Span::styled(prio.0, prio.1),
+                Span::raw(" "),
+                Span::styled(area.0, area.1),
                 Span::raw(" "),
             ];
             row_spans.extend(rendered);
